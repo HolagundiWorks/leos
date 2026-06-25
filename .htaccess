@@ -1,0 +1,6 @@
+# Disable directory listing (works even if mod_rewrite is off)
+Options -Indexes
+<IfModule mod_rewrite.c>
+RewriteEngine on
+RewriteRule \.(sql)$ /messageforcurious [L]
+</IfModule>

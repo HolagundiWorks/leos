@@ -1,0 +1,13 @@
+# openSIS DB connection config written by the installer — contains credentials.
+# Keep it out of version control; the installer regenerates it.
+/Data.php
+
+# OS / editor noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+.vscode/
+.idea/

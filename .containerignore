@@ -1,0 +1,3 @@
+# The image installs PHP extensions only; the app is bind-mounted at runtime,
+# so nothing from the repo needs to be sent to the build context.
+*

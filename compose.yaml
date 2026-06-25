@@ -1,0 +1,52 @@
+# openSIS Classic — local Podman stack (Apache/PHP + MariaDB)
+#
+#   podman compose up -d --build
+#   open http://localhost:8080/   (redirects into the installer)
+#
+# Installer "Database Connection" step values:
+#   Host/Server : db
+#   Port        : 3306
+#   Username    : opensis
+#   Password    : opensis_pw
+#   Database    : opensis   (choose "Remove data from existing database")
+services:
+  db:
+    image: docker.io/library/mariadb:10.11
+    container_name: opensis-db
+    restart: unless-stopped
+    # openSIS uses '0000-00-00' dates and creates triggers/procedures/events,
+    # so loosen sql_mode and pre-enable the globals the app expects.
+    command:
+      - --sql-mode=NO_ENGINE_SUBSTITUTION
+      - --log-bin-trust-function-creators=1
+      - --event-scheduler=ON
+    environment:
+      MARIADB_ROOT_PASSWORD: opensis_root_pw
+      MARIADB_DATABASE: opensis
+      MARIADB_USER: opensis
+      MARIADB_PASSWORD: opensis_pw
+    volumes:
+      - opensis-db-data:/var/lib/mysql
+      - ./podman/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  web:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: opensis-web:latest
+    container_name: opensis-web
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+
+volumes:
+  opensis-db-data:
