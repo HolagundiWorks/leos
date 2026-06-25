@@ -2,7 +2,7 @@
    consistent whether it renders standalone (playground) or embedded inside a
    legacy HCW-SMS PHP page. */
 .hcw-ui {
-  --hcw-page-bg: #f6f7fb;
+  --hcw-page-bg: #FAFBFC;
   background: var(--hcw-page-bg);
   color: var(--mantine-color-text);
   font-family: var(--mantine-font-family);
