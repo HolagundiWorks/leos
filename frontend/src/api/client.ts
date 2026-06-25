@@ -103,6 +103,16 @@ export function fetchStudents(
   return req<StudentsResponse>(`/students${suffix}`, { token });
 }
 
+export interface StudentDetail extends Student {
+  middle_name: string | null;
+  alt_id: string | null;
+}
+
+export async function fetchStudent(token: string, id: number) {
+  const { student } = await req<{ student: StudentDetail }>(`/students/${id}`, { token });
+  return student;
+}
+
 export interface Staff {
   id: number;
   first_name: string | null;

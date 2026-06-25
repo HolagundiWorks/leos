@@ -17,6 +17,12 @@ $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 $route = trim((string) preg_replace('#^.*/api/v1#', '', $uri), '/');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+// Dynamic routes (regex) before the static switch.
+if ($method === 'GET' && preg_match('#^students/(\d+)$#', $route, $m)) {
+    require_user();
+    json_out(['student' => student_detail((int) $m[1])]);
+}
+
 switch ("$method $route") {
     case 'GET ':
     case 'GET health':
@@ -96,6 +102,20 @@ function students_list(string $q, int $limit, int $offset): array
         $params
     );
     return ['students' => $rows, 'total' => $total];
+}
+
+function student_detail(int $id): array
+{
+    $row = db_row(
+        'SELECT student_id AS id, first_name, middle_name, last_name, email, phone,
+                gender, birthdate, alt_id
+           FROM students WHERE student_id=? LIMIT 1',
+        [(string) $id]
+    );
+    if (!$row) {
+        fail('student not found', 404);
+    }
+    return $row;
 }
 
 function staff_list(string $q, int $limit, int $offset): array

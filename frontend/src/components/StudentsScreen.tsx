@@ -21,10 +21,10 @@ function colorFor(id: number): AccentColor {
   return accentColors[id % accentColors.length];
 }
 
-function StudentRow({ s }: { s: Student }) {
+function StudentRow({ s, onOpen }: { s: Student; onOpen: (id: number) => void }) {
   const name = `${s.first_name} ${s.last_name}`;
   return (
-    <Card>
+    <Card onClick={() => onOpen(s.id)} style={{ cursor: 'pointer' }}>
       <Group justify="space-between" wrap="nowrap">
         <Group wrap="nowrap" gap="md" style={{ minWidth: 0 }}>
           <Avatar radius="xl" color={colorFor(s.id)} variant="light">
@@ -54,7 +54,11 @@ function StudentRow({ s }: { s: Student }) {
   );
 }
 
-export function StudentsScreen() {
+export function StudentsScreen({
+  onOpenStudent,
+}: {
+  onOpenStudent: (id: number) => void;
+}) {
   const [q, setQ] = useState('');
   const { data, isLoading } = useStudents(q);
 
@@ -81,7 +85,9 @@ export function StudentsScreen() {
               <Skeleton key={i} height={68} radius="lg" />
             ))
           ) : data && data.students.length > 0 ? (
-            data.students.map((s) => <StudentRow key={s.id} s={s} />)
+            data.students.map((s) => (
+              <StudentRow key={s.id} s={s} onOpen={onOpenStudent} />
+            ))
           ) : (
             <Card>
               <Text c="dimmed" ta="center" py="xl">

@@ -22,7 +22,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 
 ## Phase 1 — Finish the prototype (guide §19) 🟡
 
-- ⬜ **Student profile** — `GET /api/v1/students/{id}`; tabbed profile
+- ✅ **Student profile** — `GET /api/v1/students/{id}`; tabbed profile
   (Profile · Attendance · Fees · Academics · Documents) with top-right alert chips
 - ⬜ **Selectable tables** — row selection refines the bottom ribbon (Edit · View ·
   Collect Fee · Print ID · Message Parent)
@@ -57,4 +57,4 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 ---
 
 ### Current focus
-Phase 1 → Student profile, then selectable-table→ribbon, then the work-queue dashboard.
+Phase 1 → selectable-table → ribbon refinement, then the work-queue dashboard.
