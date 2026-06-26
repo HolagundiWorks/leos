@@ -1,6 +1,8 @@
 .ribbon {
   height: 100%;
-  background: transparent;
+  background: rgba(105, 41, 196, 0.92); /* Carbon Purple 70 */
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
   display: flex;
   align-items: stretch;
   overflow-x: auto;
@@ -11,13 +13,13 @@
   height: 6px;
 }
 .ribbon::-webkit-scrollbar-thumb {
-  background: var(--mantine-color-gray-3);
+  background: rgba(255, 255, 255, 0.3);
   border-radius: 3px;
 }
 
 /* Three regions: greeting (left) · modules (center) · spacer (right). The two
-   equal-flex sides keep the modules centered and can never overlap them — the
-   greeting clips with an ellipsis as the side shrinks. */
+   equal-flex sides keep the modules centered; the greeting clips with an
+   ellipsis as the side shrinks. */
 .side {
   flex: 1 1 0;
   min-width: 0;
@@ -36,7 +38,7 @@
   font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
-  color: var(--mantine-color-gray-8);
+  color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -44,7 +46,7 @@
 .greetSub {
   font-size: 11.5px;
   line-height: 1.25;
-  color: var(--mantine-color-gray-5);
+  color: rgba(255, 255, 255, 0.72);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -78,7 +80,7 @@
   line-height: 1;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--mantine-color-gray-5);
+  color: rgba(255, 255, 255, 0.6);
   margin-top: 3px;
 }
 
@@ -93,18 +95,20 @@
   border: none;
   border-radius: var(--mantine-radius-md);
   background: transparent;
-  color: var(--mantine-color-gray-7);
+  color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
 
 .btn:hover {
-  background: var(--mantine-color-gray-1);
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
 }
 
+/* Active module → contrasting teal accent on the purple bar. */
 .btn[data-active='true'] {
-  background: var(--mantine-color-lavender-1);
-  color: var(--mantine-color-lavender-7);
+  background: var(--mantine-color-mint-2);
+  color: var(--mantine-color-mint-9);
 }
 
 .btnLabel {
@@ -117,6 +121,6 @@
 .divider {
   width: 1px;
   align-self: stretch;
-  background: var(--mantine-color-gray-2);
+  background: rgba(255, 255, 255, 0.22);
   margin: 4px 6px;
 }
