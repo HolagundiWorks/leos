@@ -48,23 +48,30 @@ body {
   user-select: none;
 }
 
-/* AppShell chrome → frosted glass. */
+/* IBM Carbon tints (r,g,b triplets) used for the glass surfaces. */
+:root {
+  --carbon-blue-10: 237, 245, 255; /* #edf5ff */
+  --carbon-cool-10: 242, 244, 248; /* #f2f4f8 */
+  --carbon-gray-100: 22, 22, 22; /* #161616 */
+}
+
+/* AppShell chrome → frosted glass, more transparent (Carbon cool gray 10). */
 .mantine-AppShell-header,
 .mantine-AppShell-footer {
-  background: rgba(255, 255, 255, 0.5) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
-  border-color: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(var(--carbon-cool-10), 0.42) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  border-color: rgba(255, 255, 255, 0.4) !important;
 }
 .mantine-AppShell-main {
   background: transparent !important;
 }
 
-/* Content cards → glass panes. */
+/* Content cards → subtle Carbon-tinted glass (blue 10), more transparent. */
 .mantine-Card-root {
-  background: rgba(255, 255, 255, 0.6) !important;
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  backdrop-filter: blur(14px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.55) !important;
-  box-shadow: 0 10px 30px rgba(15, 111, 255, 0.08);
+  background: rgba(var(--carbon-blue-10), 0.46) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 8px 24px rgba(var(--carbon-gray-100), 0.06);
 }
