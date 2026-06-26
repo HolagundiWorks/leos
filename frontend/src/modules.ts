@@ -280,6 +280,15 @@ export const modules: ModuleDef[] = [
     ],
   },
   {
+    key: 'security',
+    label: 'Security',
+    icon: Settings,
+    actions: [
+      { key: 'audit', label: 'Audit Log', icon: FileText },
+      { key: 'roles', label: 'Roles', icon: Users },
+    ],
+  },
+  {
     key: 'backup',
     label: 'Backup',
     icon: Download,
@@ -306,5 +315,5 @@ export const moduleGroups: ModuleGroup[] = [
   { label: 'Academics', keys: ['classes', 'teacher-subjects', 'courses', 'subjects', 'classrooms', 'floorplan'] },
   { label: 'Schedule', keys: ['timetable', 'substitution', 'timings'] },
   { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport', 'payroll', 'events', 'activities'] },
-  { label: 'System', keys: ['academic-year', 'backup', 'settings'] },
+  { label: 'System', keys: ['academic-year', 'security', 'backup', 'settings'] },
 ];

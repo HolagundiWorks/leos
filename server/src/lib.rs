@@ -268,6 +268,19 @@ fn dispatch(
     if method == &Method::Post && path == "/substitutions/resolve" {
         return with_auth(state, token, |_| substitution_resolve(state, body));
     }
+    // Security & Audit (P11)
+    if method == &Method::Get && path == "/audit-log" {
+        return with_auth(state, token, |_| audit_log_list(state, url));
+    }
+    if method == &Method::Get && path == "/roles" {
+        return with_auth(state, token, |_| roles_list(state));
+    }
+    if method == &Method::Post && path.starts_with("/roles/") && path.ends_with("/update") {
+        let id_str = &path["/roles/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| role_update(state, id, body));
+        }
+    }
     // Backup & Recovery OS (P10)
     if method == &Method::Get && path == "/backup/config" {
         return with_auth(state, token, |_| backup_config_get(state));
@@ -1089,6 +1102,8 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS exam_marks(id INTEGER PRIMARY KEY AUTOINCREMENT, exam_id INTEGER NOT NULL, student_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, marks_obtained REAL, max_marks REAL DEFAULT 100, grade TEXT, remarks TEXT, UNIQUE(exam_id, student_id, subject_id));
          CREATE TABLE IF NOT EXISTS salary_structures(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL UNIQUE, basic REAL DEFAULT 0, hra REAL DEFAULT 0, da REAL DEFAULT 0, ta REAL DEFAULT 0, other_allowances REAL DEFAULT 0, pf_deduction REAL DEFAULT 0, pt_deduction REAL DEFAULT 0, other_deductions REAL DEFAULT 0, effective_from TEXT, updated_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS payslips(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL, month TEXT NOT NULL, basic REAL, hra REAL, da REAL, ta REAL, other_allowances REAL, pf_deduction REAL, pt_deduction REAL, other_deductions REAL, gross REAL, net REAL, working_days INTEGER, paid_days INTEGER, generated_at TEXT DEFAULT (datetime('now')), UNIQUE(staff_id, month));
+         CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT NOT NULL, resource_type TEXT, resource_id INTEGER, detail TEXT, ip TEXT, created_at TEXT DEFAULT (datetime('now')));
+         CREATE TABLE IF NOT EXISTS roles(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, permissions TEXT DEFAULT '{}');
          CREATE TABLE IF NOT EXISTS backup_config(id INTEGER PRIMARY KEY, schedule TEXT DEFAULT 'daily', destinations TEXT DEFAULT '[]', last_backup_at TEXT, enabled INTEGER DEFAULT 1);
          CREATE TABLE IF NOT EXISTS backup_log(id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL, path TEXT, size_bytes INTEGER, status TEXT DEFAULT 'ok', created_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS activities(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, activity_type TEXT DEFAULT 'field_visit', date TEXT, end_date TEXT, venue TEXT, description TEXT, status TEXT DEFAULT 'planned', created_by INTEGER, created_at TEXT DEFAULT (datetime('now')));
@@ -1118,6 +1133,24 @@ fn init_db(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN join_date TEXT", []);
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN employee_id TEXT", []);
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN department_id INTEGER", []);
+    let _ = conn.execute("ALTER TABLE users ADD COLUMN role_id INTEGER", []);
+
+    // Seed default roles (idempotent)
+    let default_roles = [
+        ("principal",        r#"{"all": true}"#),
+        ("timetable_coord",  r#"{"timetable": true, "substitution": true, "timings": true}"#),
+        ("exam_coord",       r#"{"exams": true, "students": "read"}"#),
+        ("class_teacher",    r#"{"attendance": true, "students": "read"}"#),
+        ("accountant",       r#"{"fees": true, "payroll": true}"#),
+        ("front_office",     r#"{"students": true, "staff": "read", "events": true}"#),
+        ("read_only",        r#"{"all": "read"}"#),
+    ];
+    for (name, perms) in default_roles {
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO roles(name, permissions) VALUES(?1, ?2)",
+            params![name, perms],
+        );
+    }
 
     if count(conn, "SELECT COUNT(*) FROM users") == 0 {
         seed(conn);
@@ -1412,6 +1445,74 @@ fn substitution_resolve(state: &AppState, body: &str) -> (u16, Value) {
         Ok(_) => (404, json!({"error": "substitution not found"})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Security & Audit (P11) ----
+
+fn audit_log_list(state: &AppState, url: &str) -> (u16, Value) {
+    let resource = q_param(url, "resource");
+    let user_id: Option<i64> = q_param(url, "user_id").and_then(|v| v.parse().ok());
+    let limit: i64 = q_param(url, "limit").and_then(|v| v.parse().ok()).unwrap_or(100);
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT al.id, al.user_id, u.username, al.action, al.resource_type, al.resource_id, al.detail, al.ip, al.created_at
+         FROM audit_log al
+         LEFT JOIN users u ON u.id = al.user_id
+         WHERE (?1 IS NULL OR al.resource_type=?1) AND (?2 IS NULL OR al.user_id=?2)
+         ORDER BY al.created_at DESC LIMIT ?3",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![resource, user_id, limit], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "user_id": r.get::<_, Option<i64>>(1)?,
+            "username": r.get::<_, Option<String>>(2)?,
+            "action": r.get::<_, String>(3)?,
+            "resource_type": r.get::<_, Option<String>>(4)?,
+            "resource_id": r.get::<_, Option<i64>>(5)?,
+            "detail": r.get::<_, Option<String>>(6)?,
+            "ip": r.get::<_, Option<String>>(7)?,
+            "created_at": r.get::<_, String>(8)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"audit_log": rows, "total": total}))
+}
+
+#[allow(dead_code)]
+fn audit_write(conn: &Connection, user_id: i64, action: &str, resource_type: &str, resource_id: Option<i64>, detail: Option<&str>) {
+    let _ = conn.execute(
+        "INSERT INTO audit_log(user_id, action, resource_type, resource_id, detail) VALUES(?1,?2,?3,?4,?5)",
+        params![user_id, action, resource_type, resource_id, detail],
+    );
+}
+
+fn roles_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare("SELECT id, name, permissions FROM roles ORDER BY name") {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map([], |r| {
+        Ok(json!({ "id": r.get::<_, i64>(0)?, "name": r.get::<_, String>(1)?, "permissions": r.get::<_, Option<String>>(2)? }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    (200, json!({"roles": rows, "total": rows.len()}))
+}
+
+fn role_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let perms = v["permissions"].to_string();
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("UPDATE roles SET permissions=?1 WHERE id=?2", params![perms, id]);
+    (200, json!({"ok": true}))
 }
 
 // ---- Backup & Recovery OS (P10) ----
