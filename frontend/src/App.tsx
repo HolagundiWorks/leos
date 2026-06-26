@@ -39,7 +39,7 @@ export function App() {
 
   let screen;
   if (active === 'dashboard') {
-    screen = <DashboardScreen user={sessionUser} onNavigate={navigate} />;
+    screen = <DashboardScreen onNavigate={navigate} />;
   } else if (active === 'students') {
     screen =
       studentId != null ? (

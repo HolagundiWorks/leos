@@ -10,7 +10,6 @@ import {
   Stack,
   Text,
   ThemeIcon,
-  Title,
   UnstyledButton,
 } from '@mantine/core';
 import { Calendar } from '@mantine/dates';
@@ -19,7 +18,6 @@ import dayjs from 'dayjs';
 import type { IconComponent } from '../icons';
 import type { AccentColor } from '../theme';
 import type { WorkItem } from '../api/client';
-import type { SessionUser } from '../types';
 import { useDashboardToday } from '../hooks/useDashboardToday';
 
 const SEV: Record<WorkItem['severity'], { color: AccentColor; Icon: IconComponent }> = {
@@ -102,10 +100,8 @@ function AgendaRow({ item }: { item: AgendaItem }) {
 
 /** Active work-queue dashboard: "Today" needs-attention list, then context. */
 export function DashboardScreen({
-  user,
   onNavigate,
 }: {
-  user: SessionUser;
   onNavigate: (module: string) => void;
 }) {
   const [selected, setSelected] = useState<Date>(new Date());
@@ -115,13 +111,6 @@ export function DashboardScreen({
   return (
     <Container size="xl" px={0}>
       <Stack gap="lg">
-        <div>
-          <Title order={2}>Good morning, {user.name.split(' ')[0]} 👋</Title>
-          <Text c="dimmed">
-            {dayjs().format('dddd, D MMMM YYYY')} · here's what needs your attention.
-          </Text>
-        </div>
-
         <Card>
           <Group justify="space-between" mb="xs">
             <Text fw={650}>Today</Text>

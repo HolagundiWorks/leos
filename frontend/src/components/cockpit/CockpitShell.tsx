@@ -58,7 +58,7 @@ export function CockpitShell({
               <UtilityStrip user={user} />
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-              <TopRibbon active={active} onSelect={onNavigate} />
+              <TopRibbon active={active} onSelect={onNavigate} userName={user.name} />
             </div>
           </div>
         </AppShell.Header>

@@ -1,10 +1,19 @@
 import { Fragment } from 'react';
+import dayjs from 'dayjs';
 import { moduleByKey, moduleGroups } from '../../modules';
 import classes from './TopRibbon.module.css';
 
 interface TopRibbonProps {
   active: string;
   onSelect: (key: string) => void;
+  userName?: string;
+}
+
+function greetingWord(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
 /**
@@ -12,9 +21,20 @@ interface TopRibbonProps {
  * labelled panels with vertical dividers, horizontally scrollable on overflow.
  * Replaces the left icon rail.
  */
-export function TopRibbon({ active, onSelect }: TopRibbonProps) {
+export function TopRibbon({ active, onSelect, userName }: TopRibbonProps) {
+  const firstName = (userName ?? '').split(' ')[0];
   return (
     <div className={classes.ribbon}>
+      {userName && (
+        <div className={classes.greeting}>
+          <div className={classes.greetTitle}>
+            {greetingWord()}, {firstName} 👋
+          </div>
+          <div className={classes.greetSub}>
+            {dayjs().format('dddd, D MMMM YYYY')} · here's what needs your attention.
+          </div>
+        </div>
+      )}
       <div className={classes.inner}>
         {moduleGroups.map((group, gi) => (
           <Fragment key={group.label}>
