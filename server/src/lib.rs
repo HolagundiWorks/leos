@@ -141,6 +141,36 @@ fn dispatch(
     if method == &Method::Get && path == "/classes" {
         return with_auth(state, token, |_| classes_list(state));
     }
+    if method == &Method::Post && path == "/classes" {
+        return with_auth(state, token, |_| class_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/classes/") && path.ends_with("/update") {
+        let id_str = &path["/classes/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| class_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/classes/") && path.ends_with("/delete") {
+        let id_str = &path["/classes/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| class_delete(state, id));
+        }
+    }
+    if method == &Method::Post && path == "/sections" {
+        return with_auth(state, token, |_| section_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/sections/") && path.ends_with("/update") {
+        let id_str = &path["/sections/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| section_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/sections/") && path.ends_with("/delete") {
+        let id_str = &path["/sections/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| section_delete(state, id));
+        }
+    }
     if method == &Method::Get && path == "/timetable" {
         return with_auth(state, token, |_| timetable_list(state, url));
     }
@@ -957,6 +987,109 @@ fn seed_classes(conn: &Connection) {
             i += 1;
         }
     }
+}
+
+fn class_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "name required"})),
+    };
+    let grade = v["grade_level"].as_str().map(str::to_string);
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO classes(name, grade_level) VALUES(?1, ?2)",
+        params![name, grade],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn class_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE classes SET name=COALESCE(?1, name), grade_level=?2 WHERE id=?3",
+        params![
+            v["name"].as_str().filter(|s| !s.is_empty()),
+            v["grade_level"].as_str().map(str::to_string),
+            id,
+        ],
+    ) {
+        Ok(0) => (404, json!({"error": "class not found"})),
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn class_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    // Cascade: delete sections + timetable entries for those sections first.
+    let section_ids: Vec<i64> = {
+        let mut stmt = conn.prepare("SELECT id FROM sections WHERE class_id=?1").unwrap();
+        let mut rows = stmt.query(params![id]).unwrap();
+        let mut ids = Vec::new();
+        while let Some(r) = rows.next().unwrap() {
+            ids.push(r.get::<_, i64>(0).unwrap());
+        }
+        ids
+    };
+    for sid in section_ids {
+        conn.execute("DELETE FROM timetable_entries WHERE section_id=?1", params![sid]).ok();
+        conn.execute("DELETE FROM sections WHERE id=?1", params![sid]).ok();
+    }
+    conn.execute("DELETE FROM classes WHERE id=?1", params![id]).ok();
+    (200, json!({"ok": true}))
+}
+
+fn section_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let class_id = match v["class_id"].as_i64() {
+        Some(i) => i,
+        None => return (422, json!({"error": "class_id required"})),
+    };
+    let name = match v["name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "name required"})),
+    };
+    let teacher_id = v["teacher_id"].as_i64();
+    let room_id = v["room_id"].as_i64();
+    let capacity = v["capacity"].as_i64();
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO sections(class_id, name, teacher_id, capacity, room_id) VALUES(?1,?2,?3,?4,?5)",
+        params![class_id, name, teacher_id, capacity, room_id],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn section_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE sections SET name=COALESCE(?1,name), teacher_id=?2, capacity=?3, room_id=?4 WHERE id=?5",
+        params![
+            v["name"].as_str().filter(|s| !s.is_empty()),
+            v["teacher_id"].as_i64(),
+            v["capacity"].as_i64(),
+            v["room_id"].as_i64(),
+            id,
+        ],
+    ) {
+        Ok(0) => (404, json!({"error": "section not found"})),
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn section_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    conn.execute("DELETE FROM timetable_entries WHERE section_id=?1", params![id]).ok();
+    conn.execute("DELETE FROM sections WHERE id=?1", params![id]).ok();
+    (200, json!({"ok": true}))
 }
 
 fn classes_list(state: &AppState) -> (u16, Value) {

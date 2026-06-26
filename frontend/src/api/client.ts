@@ -286,6 +286,24 @@ export interface ClassesResponse {
 export function fetchClasses(token: string) {
   return req<ClassesResponse>('/classes', { token });
 }
+export function createClass(token: string, data: { name: string; grade_level?: string }) {
+  return req<{ ok: boolean; id: number }>('/classes', { method: 'POST', token, body: data });
+}
+export function updateClass(token: string, id: number, data: { name?: string; grade_level?: string }) {
+  return req<{ ok: boolean }>(`/classes/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteClass(token: string, id: number) {
+  return req<{ ok: boolean }>(`/classes/${id}/delete`, { method: 'POST', token, body: {} });
+}
+export function createSection(token: string, data: { class_id: number; name: string; teacher_id?: number | null; room_id?: number | null; capacity?: number | null }) {
+  return req<{ ok: boolean; id: number }>('/sections', { method: 'POST', token, body: data });
+}
+export function updateSection(token: string, id: number, data: { name?: string; teacher_id?: number | null; room_id?: number | null; capacity?: number | null }) {
+  return req<{ ok: boolean }>(`/sections/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteSection(token: string, id: number) {
+  return req<{ ok: boolean }>(`/sections/${id}/delete`, { method: 'POST', token, body: {} });
+}
 
 export interface Term {
   id: number;
