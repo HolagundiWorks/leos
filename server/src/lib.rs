@@ -628,6 +628,15 @@ fn dispatch(
     if method == &Method::Get && path == "/fee-payments/overdue" {
         return with_auth(state, token, |_| fee_overdue(state, url));
     }
+    if method == &Method::Get && path == "/fees/report" {
+        return with_auth(state, token, |_| fee_report(state));
+    }
+    if method == &Method::Post && path.starts_with("/fee-payments/") && path.ends_with("/delete") {
+        let id_str = &path["/fee-payments/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| fee_payment_delete(state, id));
+        }
+    }
     // Exam OS (P5)
     if method == &Method::Get && path == "/exams" {
         return with_auth(state, token, |_| exams_list(state, url));
@@ -3515,6 +3524,12 @@ fn fee_payment_create(state: &AppState, body: &str) -> (u16, Value) {
     }
 }
 
+fn fee_payment_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM fee_payments WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
 fn chrono_or_ts() -> String {
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
     format!("{secs}")
@@ -3608,6 +3623,76 @@ fn fee_overdue(state: &AppState, url: &str) -> (u16, Value) {
     };
     let total = rows.len();
     (200, json!({"overdue": rows, "total": total}))
+}
+
+/// Aggregate finance snapshot for the Reports view (read-only).
+fn fee_report(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+
+    let (collected, count): (f64, i64) = conn
+        .query_row("SELECT COALESCE(SUM(amount_paid),0), COUNT(*) FROM fee_payments", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap_or((0.0, 0));
+
+    let kv = |sql: &str| -> Vec<Value> {
+        let mut stmt = match conn.prepare(sql) { Ok(s) => s, Err(_) => return vec![] };
+        let m = stmt.query_map([], |r| Ok(json!({ "label": r.get::<_, String>(0)?, "amount": r.get::<_, f64>(1)? })));
+        match m { Ok(it) => it.filter_map(|r| r.ok()).collect(), Err(_) => vec![] }
+    };
+    let by_head = kv(
+        "SELECT fh.name, COALESCE(SUM(fp.amount_paid),0)
+         FROM fee_payments fp JOIN fee_heads fh ON fh.id=fp.fee_head_id
+         GROUP BY fh.id ORDER BY 2 DESC",
+    );
+    let by_mode = kv(
+        "SELECT COALESCE(NULLIF(payment_mode,''),'cash'), COALESCE(SUM(amount_paid),0)
+         FROM fee_payments GROUP BY 1 ORDER BY 2 DESC",
+    );
+
+    let (out_students, out_total): (i64, f64) = conn.query_row(
+        "SELECT COUNT(DISTINCT student_id), COALESCE(SUM(balance),0) FROM (
+            SELECT s.id AS student_id,
+                   (fs.amount - COALESCE((SELECT SUM(fp.amount_paid) FROM fee_payments fp
+                        WHERE fp.student_id=s.id AND fp.fee_head_id=fs.fee_head_id),0)) AS balance
+            FROM students s
+            JOIN (SELECT DISTINCT ss.student_id, se.class_id FROM section_students ss
+                  JOIN sections se ON se.id=ss.section_id) sc ON sc.student_id=s.id
+            JOIN fee_structures fs ON (fs.class_id IS NULL OR fs.class_id=sc.class_id)
+         ) WHERE balance > 0",
+        [], |r| Ok((r.get(0)?, r.get(1)?)),
+    ).unwrap_or((0, 0.0));
+
+    // Recent payments (last 10).
+    let recent: Vec<Value> = {
+        let mut stmt = match conn.prepare(
+            "SELECT fp.payment_date, s.first_name, s.last_name, fh.name, fp.amount_paid, fp.payment_mode, fp.receipt_no
+             FROM fee_payments fp
+             JOIN students s ON s.id=fp.student_id
+             JOIN fee_heads fh ON fh.id=fp.fee_head_id
+             ORDER BY fp.payment_date DESC, fp.id DESC LIMIT 10",
+        ) { Ok(s) => s, Err(_) => return (200, json!({
+            "collected": collected, "payments_count": count, "by_head": by_head, "by_mode": by_mode,
+            "outstanding_total": out_total, "outstanding_students": out_students, "recent": []
+        })) };
+        let m = stmt.query_map([], |r| Ok(json!({
+            "date": r.get::<_, Option<String>>(0)?,
+            "student": format!("{} {}", r.get::<_, Option<String>>(1)?.unwrap_or_default(), r.get::<_, Option<String>>(2)?.unwrap_or_default()).trim().to_string(),
+            "head": r.get::<_, String>(3)?,
+            "amount": r.get::<_, f64>(4)?,
+            "mode": r.get::<_, Option<String>>(5)?,
+            "receipt_no": r.get::<_, Option<String>>(6)?,
+        })));
+        match m { Ok(it) => it.filter_map(|r| r.ok()).collect(), Err(_) => vec![] }
+    };
+
+    (200, json!({
+        "collected": collected,
+        "payments_count": count,
+        "by_head": by_head,
+        "by_mode": by_mode,
+        "outstanding_total": out_total,
+        "outstanding_students": out_students,
+        "recent": recent,
+    }))
 }
 
 // ---- Exam OS (P5) ----
