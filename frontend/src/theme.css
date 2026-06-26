@@ -55,10 +55,11 @@ body {
   --carbon-gray-100: 22, 22, 22; /* #161616 */
 }
 
-/* Header → bold purple bar (Carbon Purple 70). */
+/* Header transparent so the translucent ribbon shows the animated background;
+   the top utility strip carries the bold purple (set in CockpitShell). */
 .mantine-AppShell-header {
-  background: var(--mantine-color-lavender-6) !important;
-  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: transparent !important;
+  border: none !important;
 }
 .mantine-AppShell-main {
   background: transparent !important;

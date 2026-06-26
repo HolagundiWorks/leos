@@ -45,6 +45,7 @@ export function CockpitShell({ user, active, onNavigate, children }: CockpitShel
               style={{
                 height: 44,
                 flexShrink: 0,
+                background: 'var(--mantine-color-lavender-6)',
                 borderBottom: '1px solid rgba(255, 255, 255, 0.18)',
               }}
             >
