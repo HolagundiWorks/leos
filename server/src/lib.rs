@@ -126,6 +126,12 @@ fn dispatch(
     if method == &Method::Get && path == "/timetable" {
         return with_auth(state, token, |_| timetable_list(state, url));
     }
+    if method == &Method::Get && path == "/timetable/quota" {
+        return with_auth(state, token, |_| timetable_quota(state, url));
+    }
+    if method == &Method::Get && path == "/timetable/teacher-load" {
+        return with_auth(state, token, |_| timetable_teacher_load(state));
+    }
     if method == &Method::Post && path == "/timetable" {
         return with_auth(state, token, |_| timetable_set(state, body));
     }
@@ -968,6 +974,106 @@ fn timetable_clear(state: &AppState, body: &str) -> (u16, Value) {
         params![section_id, period_id, day],
     );
     (200, json!({"ok": true}))
+}
+
+fn timetable_quota(state: &AppState, url: &str) -> (u16, Value) {
+    let section_id = match q_param(url, "section_id").and_then(|s| s.parse::<i64>().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "section_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut subjects: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let mut stmt = conn.prepare(
+            "SELECT s.id, s.name, s.code, COALESCE(s.weekly_periods, 0),
+                    (SELECT COUNT(*) FROM timetable_entries te
+                     WHERE te.subject_id = s.id AND te.section_id = ?1) AS scheduled
+             FROM subjects s
+             WHERE s.weekly_periods > 0
+             ORDER BY s.name",
+        )?;
+        let mut rows = stmt.query(params![section_id])?;
+        while let Some(r) = rows.next()? {
+            let target: i64 = r.get(3)?;
+            let scheduled: i64 = r.get(4)?;
+            let status = if scheduled == target { "met" }
+                else if scheduled < target { "under" }
+                else { "over" };
+            subjects.push(json!({
+                "id": r.get::<_, i64>(0)?,
+                "name": r.get::<_, Option<String>>(1)?,
+                "code": r.get::<_, Option<String>>(2)?,
+                "target": target,
+                "scheduled": scheduled,
+                "status": status,
+            }));
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => {
+            let total = subjects.len();
+            (200, json!({"subjects": subjects, "total": total}))
+        }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn timetable_teacher_load(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut teachers: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let mut tlist: Vec<(i64, Option<String>, Option<String>, i64)> = Vec::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT te.staff_id, st.first_name, st.last_name, COUNT(*) AS total
+                 FROM timetable_entries te
+                 JOIN staff st ON st.id = te.staff_id
+                 WHERE te.staff_id IS NOT NULL
+                 GROUP BY te.staff_id
+                 ORDER BY total DESC, st.first_name",
+            )?;
+            let mut rows = stmt.query([])?;
+            while let Some(r) = rows.next()? {
+                tlist.push((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?));
+            }
+        }
+        for (staff_id, first, last, total) in tlist {
+            let name =
+                first.map(|f| format!("{} {}", f, last.unwrap_or_default()).trim().to_string());
+            let mut sections: Vec<Value> = Vec::new();
+            let mut sstmt = conn.prepare(
+                "SELECT c.name || ' – Sec ' || sec.name, COUNT(*) AS periods
+                 FROM timetable_entries te
+                 JOIN sections sec ON sec.id = te.section_id
+                 JOIN classes c ON c.id = sec.class_id
+                 WHERE te.staff_id = ?1
+                 GROUP BY te.section_id
+                 ORDER BY periods DESC",
+            )?;
+            let mut srows = sstmt.query(params![staff_id])?;
+            while let Some(s) = srows.next()? {
+                sections.push(json!({
+                    "section": s.get::<_, Option<String>>(0)?,
+                    "periods": s.get::<_, i64>(1)?,
+                }));
+            }
+            teachers.push(json!({
+                "staff_id": staff_id,
+                "teacher_name": name,
+                "total_periods": total,
+                "sections": sections,
+            }));
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => {
+            let total = teachers.len();
+            (200, json!({"teachers": teachers, "total": total}))
+        }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
 }
 
 // ---- school timings / period slots ----

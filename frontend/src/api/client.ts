@@ -238,6 +238,40 @@ export function fetchClasses(token: string) {
   return req<ClassesResponse>('/classes', { token });
 }
 
+export interface SubjectQuota {
+  id: number;
+  name: string | null;
+  code: string | null;
+  target: number;
+  scheduled: number;
+  status: 'met' | 'under' | 'over';
+}
+export interface QuotaResponse {
+  subjects: SubjectQuota[];
+  total: number;
+}
+export function fetchTimetableQuota(token: string, sectionId: number) {
+  return req<QuotaResponse>(`/timetable/quota?section_id=${sectionId}`, { token });
+}
+
+export interface TeacherLoadSection {
+  section: string | null;
+  periods: number;
+}
+export interface TeacherLoad {
+  staff_id: number;
+  teacher_name: string | null;
+  total_periods: number;
+  sections: TeacherLoadSection[];
+}
+export interface TeacherLoadResponse {
+  teachers: TeacherLoad[];
+  total: number;
+}
+export function fetchTeacherLoad(token: string) {
+  return req<TeacherLoadResponse>('/timetable/teacher-load', { token });
+}
+
 export interface TimetableEntry {
   id: number;
   section_id: number;

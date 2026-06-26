@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
   Card,
+  Collapse,
   Container,
+  Divider,
   Group,
   Modal,
+  Progress,
   Select,
   Skeleton,
   Stack,
@@ -14,21 +18,22 @@ import {
   Title,
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import type { TimetableEntry } from '../api/client';
 import { ApiError, clearTimetableEntry, setTimetableEntry } from '../api/client';
 import { useClasses } from '../hooks/useClasses';
 import { useClassrooms } from '../hooks/useClassrooms';
 import { useSubjects } from '../hooks/useSubjects';
+import { useTeacherLoad } from '../hooks/useTeacherLoad';
 import { useTeacherSubjects } from '../hooks/useTeacherSubjects';
 import { useTimings } from '../hooks/useTimings';
 import { useTimetable } from '../hooks/useTimetable';
+import { useTimetableQuota } from '../hooks/useTimetableQuota';
 import { useAuth } from '../stores/auth';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-// Colour palette keyed by (subject_id - 1) % length
 const CELL_BG = [
   '#e5f6ff', '#f0e8ff', '#e0f4f4', '#fce8f3',
   '#ede8ff', '#fff0e8', '#e8fce8', '#fff5e0',
@@ -50,7 +55,7 @@ function shortName(name: string | null): string {
   return p.length === 1 ? p[0] : `${p[0]} ${p[p.length - 1][0]}.`;
 }
 
-// ─── Timetable cell ────────────────────────────────────────────────────────
+// ─── Cell ──────────────────────────────────────────────────────────────────
 function Cell({ entry, onClick }: { entry: TimetableEntry | null; onClick: () => void }) {
   const [hover, setHover] = useState(false);
 
@@ -170,7 +175,11 @@ function CellModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teacherOptions]);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['timetable', sectionId] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['timetable', sectionId] });
+    qc.invalidateQueries({ queryKey: ['timetable-quota', sectionId] });
+    qc.invalidateQueries({ queryKey: ['teacher-load'] });
+  };
 
   const save = useMutation({
     mutationFn: () =>
@@ -203,6 +212,10 @@ function CellModal({
     label: `${s.name ?? ''}${s.code ? ` (${s.code})` : ''}`,
     group: s.type ?? 'Other',
   }));
+
+  // Show quota hint for selected subject
+  const selectedSubject = subjectsData?.subjects.find((s) => String(s.id) === subjectId);
+  const weeklyTarget = selectedSubject?.weekly_periods ?? 0;
 
   const roomOptions = (roomsData?.classrooms ?? []).map((r) => ({
     value: String(r.id),
@@ -240,39 +253,34 @@ function CellModal({
               <Text size="xs" fw={500}>{cell.entry.subject_name}</Text>
               <Text size="xs" c="dimmed">{cell.entry.teacher_name ?? 'No teacher assigned'}</Text>
             </div>
-            <Button
-              size="xs"
-              variant="subtle"
-              color="red"
-              onClick={() => clear.mutate()}
-              loading={clear.isPending}
-            >
+            <Button size="xs" variant="subtle" color="red" onClick={() => clear.mutate()} loading={clear.isPending}>
               Clear slot
             </Button>
           </Group>
         )}
 
-        <Select
-          label="Subject"
-          placeholder="Select subject…"
-          data={subjectOptions}
-          value={subjectId}
-          onChange={(v) => {
-            setSubjectId(v);
-            setStaffId(null);
-            setConflictMsg(null);
-          }}
-          searchable
-          clearable
-        />
+        <div>
+          <Select
+            label="Subject"
+            placeholder="Select subject…"
+            data={subjectOptions}
+            value={subjectId}
+            onChange={(v) => { setSubjectId(v); setStaffId(null); setConflictMsg(null); }}
+            searchable
+            clearable
+          />
+          {weeklyTarget > 0 && (
+            <Text size="xs" c="dimmed" mt={4}>
+              Target: {weeklyTarget} periods/week
+            </Text>
+          )}
+        </div>
 
         <Select
           label="Teacher"
           placeholder={
-            !subjectId
-              ? 'Select a subject first'
-              : teacherOptions.length === 0
-              ? 'No teachers mapped to this subject'
+            !subjectId ? 'Select a subject first'
+              : teacherOptions.length === 0 ? 'No teachers mapped to this subject'
               : 'Select teacher…'
           }
           data={teacherOptions}
@@ -292,15 +300,123 @@ function CellModal({
           searchable
         />
 
-        <Button
-          onClick={() => save.mutate()}
-          loading={save.isPending}
-          disabled={!subjectId}
-        >
+        <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!subjectId}>
           {cell.entry ? 'Update' : 'Assign'}
         </Button>
       </Stack>
     </Modal>
+  );
+}
+
+// ─── Subject quota panel ────────────────────────────────────────────────────
+function SubjectQuotaPanel({ sectionId }: { sectionId: number }) {
+  const { data } = useTimetableQuota(sectionId);
+  if (!data || data.subjects.length === 0) return null;
+
+  const metCount = data.subjects.filter((s) => s.status === 'met').length;
+  const totalScheduled = data.subjects.reduce((s, q) => s + q.scheduled, 0);
+  const totalTarget = data.subjects.reduce((s, q) => s + q.target, 0);
+
+  return (
+    <Card>
+      <Group justify="space-between" mb="md">
+        <Group gap="xs">
+          <Text fw={600} size="sm">Subject Quotas</Text>
+          <Badge size="xs" color="teal" variant="light">{metCount}/{data.total} met</Badge>
+        </Group>
+        <Text size="xs" c="dimmed">{totalScheduled}/{totalTarget} periods scheduled</Text>
+      </Group>
+      <Stack gap={8}>
+        {data.subjects.map((s) => {
+          const pct = s.target > 0 ? Math.min(100, (s.scheduled / s.target) * 100) : 0;
+          const color = s.status === 'met' ? 'teal' : s.status === 'over' ? 'red' : 'orange';
+          const statusLabel =
+            s.status === 'met' ? '✓ Met'
+            : s.status === 'over' ? `+${s.scheduled - s.target} over`
+            : `−${s.target - s.scheduled} needed`;
+
+          return (
+            <Group key={s.id} gap="sm" wrap="nowrap" align="center">
+              <Badge w={46} variant="outline" color="gray" size="sm" style={{ flexShrink: 0 }}>
+                {s.code ?? '–'}
+              </Badge>
+              <Text size="xs" style={{ width: 130, flexShrink: 0 }} truncate>
+                {s.name}
+              </Text>
+              <Progress value={pct} color={color} size="sm" style={{ flex: 1, minWidth: 60 }} />
+              <Text size="xs" c="dimmed" style={{ width: 38, textAlign: 'right', flexShrink: 0 }}>
+                {s.scheduled}/{s.target}
+              </Text>
+              <Badge
+                size="xs"
+                color={color}
+                variant="light"
+                style={{ width: 90, textAlign: 'center', flexShrink: 0 }}
+              >
+                {statusLabel}
+              </Badge>
+            </Group>
+          );
+        })}
+      </Stack>
+    </Card>
+  );
+}
+
+// ─── Teacher load panel ─────────────────────────────────────────────────────
+function TeacherLoadPanel() {
+  const { data } = useTeacherLoad();
+  const [open, setOpen] = useState(false);
+
+  if (!data || data.teachers.length === 0) return null;
+
+  const maxPeriods = Math.max(...data.teachers.map((t) => t.total_periods), 1);
+
+  return (
+    <Card p={0}>
+      <Group
+        px="md"
+        py="sm"
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Group gap="xs">
+          <Text fw={600} size="sm">Teacher Load</Text>
+          <Badge size="xs" color="lavender" variant="light">
+            {data.total} teachers · this week
+          </Badge>
+        </Group>
+        <ActionIcon size="sm" variant="subtle" component="div">
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </ActionIcon>
+      </Group>
+
+      <Collapse in={open}>
+        <Divider />
+        <Stack gap={8} p="md">
+          {data.teachers.map((t) => (
+            <Group key={t.staff_id} gap="sm" wrap="nowrap" align="center">
+              <Text size="xs" fw={500} style={{ width: 130, flexShrink: 0 }} truncate>
+                {t.teacher_name}
+              </Text>
+              <Progress
+                value={(t.total_periods / maxPeriods) * 100}
+                color="lavender"
+                size="sm"
+                style={{ flex: 1, minWidth: 60 }}
+              />
+              <Text size="xs" c="dimmed" style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>
+                {t.total_periods} {t.total_periods === 1 ? 'period' : 'periods'}
+              </Text>
+              <Text size="xs" c="dimmed" style={{ minWidth: 140 }} truncate>
+                {t.sections.map((s) => `${s.section}×${s.periods}`).join(', ')}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+      </Collapse>
+    </Card>
   );
 }
 
@@ -325,9 +441,7 @@ function TimetableGrid({
 
   const periods = timingsData?.periods ?? [];
 
-  if (timingsLoading || ttLoading) {
-    return <Skeleton height={420} radius="md" />;
-  }
+  if (timingsLoading || ttLoading) return <Skeleton height={420} radius="md" />;
 
   if (periods.length === 0) {
     return (
@@ -345,33 +459,26 @@ function TimetableGrid({
   return (
     <Stack gap="xs">
       <Group gap="sm">
-        <Text size="xs" c="dimmed">{periodSlots.length} periods · Mon–Fri</Text>
+        <Text size="xs" c="dimmed">
+          {periodSlots.length} periods · Mon–Fri
+        </Text>
         {filledCount > 0 && (
-          <Badge variant="light" color="teal" size="xs">{filledCount} assigned</Badge>
+          <Badge variant="light" color="teal" size="xs">
+            {filledCount} assigned
+          </Badge>
         )}
       </Group>
 
       <div style={{ overflowX: 'auto' }}>
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'separate',
-            borderSpacing: 4,
-            minWidth: 680,
-          }}
-        >
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 4, minWidth: 680 }}>
           <thead>
             <tr>
               <th style={{ width: 110, paddingBottom: 6, textAlign: 'left' }}>
-                <Text size="xs" c="dimmed" fw={500} pl={4}>
-                  Period
-                </Text>
+                <Text size="xs" c="dimmed" fw={500} pl={4}>Period</Text>
               </th>
               {DAYS_SHORT.map((d, i) => (
                 <th key={i} style={{ paddingBottom: 6, textAlign: 'center' }}>
-                  <Badge variant="light" color="lavender" size="sm">
-                    {d}
-                  </Badge>
+                  <Badge variant="light" color="lavender" size="sm">{d}</Badge>
                 </th>
               ))}
             </tr>
@@ -382,45 +489,21 @@ function TimetableGrid({
                 return (
                   <tr key={`b-${period.id}`}>
                     <td colSpan={6} style={{ padding: '2px 0' }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          padding: '4px 8px',
-                          borderRadius: 4,
-                          background: 'var(--mantine-color-gray-1)',
-                        }}
-                      >
-                        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                          {period.label}
-                        </Text>
-                        <div
-                          style={{
-                            flex: 1,
-                            height: 1,
-                            background: 'var(--mantine-color-gray-3)',
-                          }}
-                        />
-                        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                          {period.start_time}–{period.end_time}
-                        </Text>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 4, background: 'var(--mantine-color-gray-1)' }}>
+                        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{period.label}</Text>
+                        <div style={{ flex: 1, height: 1, background: 'var(--mantine-color-gray-3)' }} />
+                        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{period.start_time}–{period.end_time}</Text>
                       </div>
                     </td>
                   </tr>
                 );
               }
-
               return (
                 <tr key={`p-${period.id}`}>
                   <td style={{ verticalAlign: 'middle', paddingRight: 4 }}>
                     <div style={{ padding: '2px 4px' }}>
-                      <Text size="xs" fw={600}>
-                        {period.label}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {period.start_time}
-                      </Text>
+                      <Text size="xs" fw={600}>{period.label}</Text>
+                      <Text size="xs" c="dimmed">{period.start_time}</Text>
                     </div>
                   </td>
                   {[0, 1, 2, 3, 4].map((day) => (
@@ -474,7 +557,7 @@ export function TimetableScreen() {
             <Title order={2}>Timetable Builder</Title>
             <Text c="dimmed">
               {sectionId
-                ? 'Click a cell to assign or update a period slot.'
+                ? 'Click a cell to assign or update. Quotas update live below.'
                 : 'Select a class section to view or build its timetable.'}
             </Text>
           </div>
@@ -483,10 +566,7 @@ export function TimetableScreen() {
             placeholder="Choose section…"
             data={sectionOptions}
             value={sectionId ? String(sectionId) : null}
-            onChange={(v) => {
-              setSectionId(v ? Number(v) : null);
-              setActiveCell(null);
-            }}
+            onChange={(v) => { setSectionId(v ? Number(v) : null); setActiveCell(null); }}
             searchable
             w={220}
             styles={{ root: { flexShrink: 0 } }}
@@ -494,15 +574,19 @@ export function TimetableScreen() {
         </Group>
 
         {sectionId != null ? (
-          <TimetableGrid sectionId={sectionId} onCellClick={setActiveCell} />
+          <>
+            <TimetableGrid sectionId={sectionId} onCellClick={setActiveCell} />
+            <SubjectQuotaPanel sectionId={sectionId} />
+            <TeacherLoadPanel />
+          </>
         ) : (
           <Card>
             <Stack align="center" py="xl" gap="xs">
               <Text c="dimmed">No section selected.</Text>
               <Text size="xs" c="dimmed" ta="center" maw={400}>
-                Use the dropdown above to pick a class section, then click any cell to assign
-                a subject and teacher. Conflicts (teacher double-booking, room clashes) are
-                flagged automatically.
+                Use the dropdown above to pick a class section, then click any cell to assign a
+                subject and teacher. Quotas (weekly_periods target vs scheduled) and teacher load
+                are tracked and shown below the grid.
               </Text>
             </Stack>
           </Card>
@@ -510,11 +594,7 @@ export function TimetableScreen() {
       </Stack>
 
       {activeCell && sectionId != null && (
-        <CellModal
-          cell={activeCell}
-          sectionId={sectionId}
-          onClose={() => setActiveCell(null)}
-        />
+        <CellModal cell={activeCell} sectionId={sectionId} onClose={() => setActiveCell(null)} />
       )}
     </Container>
   );
