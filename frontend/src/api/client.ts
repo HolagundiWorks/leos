@@ -238,6 +238,50 @@ export function fetchClasses(token: string) {
   return req<ClassesResponse>('/classes', { token });
 }
 
+export interface TeacherAssignment {
+  id: number;
+  staff_id: number;
+  priority: number;
+  teacher: string | null;
+}
+
+export interface SubjectWithAssignments {
+  id: number;
+  name: string | null;
+  code: string | null;
+  type: string | null;
+  weekly_periods: number;
+  assignments: TeacherAssignment[];
+}
+
+export interface TeacherSubjectsResponse {
+  subjects: SubjectWithAssignments[];
+  total: number;
+}
+
+export function fetchTeacherSubjects(token: string) {
+  return req<TeacherSubjectsResponse>('/teacher-subjects', { token });
+}
+
+export function assignTeacherSubject(
+  token: string,
+  data: { staff_id: number; subject_id: number; priority: number },
+) {
+  return req<{ ok: boolean; id: number }>('/teacher-subjects', {
+    method: 'POST',
+    token,
+    body: data,
+  });
+}
+
+export function removeTeacherSubject(token: string, id: number) {
+  return req<{ ok: boolean }>('/teacher-subjects/remove', {
+    method: 'POST',
+    token,
+    body: { id },
+  });
+}
+
 export interface RoomShape {
   id: string;
   type: string;

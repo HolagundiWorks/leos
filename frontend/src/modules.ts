@@ -33,6 +33,7 @@ import {
   Send,
   Settings,
   TrendingUp,
+  UserCheck,
   Users,
   Wallet,
   Map,
@@ -90,6 +91,16 @@ export const modules: ModuleDef[] = [
       { key: 'add', label: 'Add Class', icon: Plus, shortcut: 'Ctrl N' },
       { key: 'section', label: 'Add Section', icon: Plus },
       { key: 'edit', label: 'Edit', icon: Pencil },
+      { key: 'report', label: 'Report', icon: FileText },
+    ],
+  },
+  {
+    key: 'teacher-subjects',
+    label: 'Teacher Map',
+    icon: UserCheck,
+    actions: [
+      { key: 'assign', label: 'Assign Teacher', icon: UserCheck, shortcut: 'Ctrl N' },
+      { key: 'remove', label: 'Remove', icon: Pencil },
       { key: 'report', label: 'Report', icon: FileText },
     ],
   },
@@ -202,7 +213,7 @@ export interface ModuleGroup {
 export const moduleGroups: ModuleGroup[] = [
   { label: 'Overview', keys: ['dashboard'] },
   { label: 'People', keys: ['students', 'staff'] },
-  { label: 'Academics', keys: ['classes', 'courses', 'subjects', 'classrooms', 'floorplan'] },
+  { label: 'Academics', keys: ['classes', 'teacher-subjects', 'courses', 'subjects', 'classrooms', 'floorplan'] },
   { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport'] },
   { label: 'System', keys: ['settings'] },
 ];

@@ -123,6 +123,15 @@ fn dispatch(
     if method == &Method::Get && path == "/classes" {
         return with_auth(state, token, |_| classes_list(state));
     }
+    if method == &Method::Get && path == "/teacher-subjects" {
+        return with_auth(state, token, |_| teacher_subjects_list(state));
+    }
+    if method == &Method::Post && path == "/teacher-subjects" {
+        return with_auth(state, token, |_| teacher_subjects_assign(state, body));
+    }
+    if method == &Method::Post && path == "/teacher-subjects/remove" {
+        return with_auth(state, token, |_| teacher_subjects_remove(state, body));
+    }
     if method == &Method::Get && path == "/school" {
         return with_auth(state, token, |_| school_get(state));
     }
@@ -414,6 +423,7 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS floorplans(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, data TEXT);
          CREATE TABLE IF NOT EXISTS classes(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, grade_level TEXT, course_id INTEGER);
          CREATE TABLE IF NOT EXISTS sections(id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, name TEXT, teacher_id INTEGER, capacity INTEGER, room_id INTEGER);
+         CREATE TABLE IF NOT EXISTS teacher_subjects(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, priority INTEGER DEFAULT 1, UNIQUE(staff_id, subject_id));
          CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);",
     )
     .expect("create schema");
@@ -433,6 +443,11 @@ fn init_db(conn: &Connection) {
     }
     if count(conn, "SELECT COUNT(*) FROM classes") == 0 {
         seed_classes(conn);
+    }
+    if count(conn, "SELECT COUNT(*) FROM teacher_subjects") == 0
+        && count(conn, "SELECT COUNT(*) FROM subjects") > 0
+    {
+        seed_teacher_subjects(conn);
     }
 }
 
@@ -783,6 +798,133 @@ fn classes_list(state: &AppState) -> (u16, Value) {
     match res {
         Ok(()) => (200, json!({"classes": out, "total": out.len()})),
         Err(_) => (500, json!({"error": "query failed"})),
+    }
+}
+
+// ---- teacher-subject mapper ----
+
+fn teacher_subjects_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut subjects: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let mut slist: Vec<(i64, Option<String>, Option<String>, Option<String>, i64)> = Vec::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT id, name, code, type, weekly_periods FROM subjects ORDER BY name",
+            )?;
+            let mut rows = stmt.query([])?;
+            while let Some(r) = rows.next()? {
+                slist.push((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?));
+            }
+        }
+        for (sid, sname, code, stype, wp) in slist {
+            let mut assignments: Vec<Value> = Vec::new();
+            let mut astmt = conn.prepare(
+                "SELECT ts.id, ts.staff_id, ts.priority, st.first_name, st.last_name
+                 FROM teacher_subjects ts
+                 JOIN staff st ON st.id = ts.staff_id
+                 WHERE ts.subject_id = ?1
+                 ORDER BY ts.priority",
+            )?;
+            let mut arows = astmt.query(params![sid])?;
+            while let Some(a) = arows.next()? {
+                let first: Option<String> = a.get(3)?;
+                let last: Option<String> = a.get(4)?;
+                let teacher =
+                    first.map(|f| format!("{} {}", f, last.unwrap_or_default()).trim().to_string());
+                assignments.push(json!({
+                    "id": a.get::<_, i64>(0)?,
+                    "staff_id": a.get::<_, i64>(1)?,
+                    "priority": a.get::<_, i64>(2)?,
+                    "teacher": teacher,
+                }));
+            }
+            subjects.push(json!({
+                "id": sid,
+                "name": sname,
+                "code": code,
+                "type": stype,
+                "weekly_periods": wp,
+                "assignments": assignments,
+            }));
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => {
+            let total = subjects.len();
+            (200, json!({"subjects": subjects, "total": total}))
+        }
+        Err(_) => (500, json!({"error": "query failed"})),
+    }
+}
+
+fn teacher_subjects_assign(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let staff_id = match v["staff_id"].as_i64() {
+        Some(id) => id,
+        None => return (422, json!({"error": "staff_id required"})),
+    };
+    let subject_id = match v["subject_id"].as_i64() {
+        Some(id) => id,
+        None => return (422, json!({"error": "subject_id required"})),
+    };
+    let priority = v["priority"].as_i64().unwrap_or(1).clamp(1, 3);
+    let conn = state.conn.lock().unwrap();
+    let existing_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM teacher_subjects WHERE subject_id=?1 AND staff_id!=?2",
+            params![subject_id, staff_id],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    if existing_count >= 3 {
+        return (422, json!({"error": "Maximum 3 teachers per subject"}));
+    }
+    let res = conn.execute(
+        "INSERT INTO teacher_subjects(staff_id, subject_id, priority) VALUES(?1,?2,?3)
+         ON CONFLICT(staff_id, subject_id) DO UPDATE SET priority=excluded.priority",
+        params![staff_id, subject_id, priority],
+    );
+    match res {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn teacher_subjects_remove(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let id = match v["id"].as_i64() {
+        Some(id) => id,
+        None => return (422, json!({"error": "id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM teacher_subjects WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn seed_teacher_subjects(conn: &Connection) {
+    // staff: Anika=2, David=3, Priya=4, Rahul=5, Sneha=6, Imran=7, Lakshmi=8
+    let entries: &[(&str, i64, i64)] = &[
+        ("English", 2, 1), ("English", 3, 2),
+        ("Kannada", 4, 1),
+        ("Hindi", 5, 1),
+        ("Mathematics", 6, 1), ("Mathematics", 3, 2),
+        ("Science", 7, 1), ("Science", 8, 2),
+        ("Social Science", 4, 1),
+        ("Computer Science", 7, 1), ("Computer Science", 2, 2),
+        ("Physical Education", 8, 1),
+    ];
+    for (subj_name, staff_id, priority) in entries {
+        let sid: Option<i64> = conn
+            .query_row("SELECT id FROM subjects WHERE name=?1", params![subj_name], |r| r.get(0))
+            .ok();
+        if let Some(subject_id) = sid {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO teacher_subjects(staff_id, subject_id, priority) VALUES(?1,?2,?3)",
+                params![staff_id, subject_id, priority],
+            );
+        }
     }
 }
 
