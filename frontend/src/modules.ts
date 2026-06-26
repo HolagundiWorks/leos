@@ -38,6 +38,7 @@ import {
   Settings,
   TrendingUp,
   UserCheck,
+  UserX,
   Users,
   Wallet,
   Map,
@@ -211,6 +212,15 @@ export const modules: ModuleDef[] = [
     ],
   },
   {
+    key: 'substitution',
+    label: 'Substitution',
+    icon: UserX,
+    actions: [
+      { key: 'mark', label: 'Mark Absent', icon: UserX },
+      { key: 'resolve', label: 'Resolve', icon: Check },
+    ],
+  },
+  {
     key: 'timings',
     label: 'Timings',
     icon: Clock,
@@ -245,7 +255,7 @@ export const moduleGroups: ModuleGroup[] = [
   { label: 'Overview', keys: ['dashboard'] },
   { label: 'People', keys: ['students', 'staff'] },
   { label: 'Academics', keys: ['classes', 'teacher-subjects', 'courses', 'subjects', 'classrooms', 'floorplan'] },
-  { label: 'Schedule', keys: ['timetable', 'timings'] },
+  { label: 'Schedule', keys: ['timetable', 'substitution', 'timings'] },
   { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport'] },
   { label: 'System', keys: ['academic-year', 'settings'] },
 ];

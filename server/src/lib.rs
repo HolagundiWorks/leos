@@ -246,6 +246,22 @@ fn dispatch(
     if method == &Method::Post && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_save(state, body));
     }
+    // Substitution engine
+    if method == &Method::Get && path == "/substitutions" {
+        return with_auth(state, token, |_| substitutions_list(state, url));
+    }
+    if method == &Method::Post && path == "/substitutions/mark-absent" {
+        return with_auth(state, token, |_| substitution_mark_absent(state, body));
+    }
+    if method == &Method::Get && path == "/substitutions/suggestions" {
+        return with_auth(state, token, |_| substitution_suggestions(state, url));
+    }
+    if method == &Method::Post && path == "/substitutions/assign" {
+        return with_auth(state, token, |_| substitution_assign(state, body));
+    }
+    if method == &Method::Post && path == "/substitutions/resolve" {
+        return with_auth(state, token, |_| substitution_resolve(state, body));
+    }
     if method == &Method::Post && path == "/leosdb/save" {
         return with_auth(state, token, |_| leosdb_save(body));
     }
@@ -682,7 +698,8 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS timetable_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, section_id INTEGER NOT NULL, period_id INTEGER NOT NULL, day_of_week INTEGER NOT NULL, subject_id INTEGER, staff_id INTEGER, room_id INTEGER, UNIQUE(section_id, period_id, day_of_week));
          CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
          CREATE TABLE IF NOT EXISTS academic_years(id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL, start_date TEXT, end_date TEXT, is_active INTEGER DEFAULT 0, is_closed INTEGER DEFAULT 0);
-         CREATE TABLE IF NOT EXISTS terms(id INTEGER PRIMARY KEY AUTOINCREMENT, year_id INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE, label TEXT NOT NULL, start_date TEXT, end_date TEXT, is_active INTEGER DEFAULT 0);",
+         CREATE TABLE IF NOT EXISTS terms(id INTEGER PRIMARY KEY AUTOINCREMENT, year_id INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE, label TEXT NOT NULL, start_date TEXT, end_date TEXT, is_active INTEGER DEFAULT 0);
+         CREATE TABLE IF NOT EXISTS substitutions(id INTEGER PRIMARY KEY AUTOINCREMENT, original_entry_id INTEGER NOT NULL, original_staff_id INTEGER NOT NULL, substitute_staff_id INTEGER, date TEXT NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')), resolved_at TEXT, UNIQUE(original_entry_id, date));",
     )
     .expect("create schema");
 
@@ -774,6 +791,221 @@ fn seed(conn: &Connection) {
             params![f, l, e, p, prof],
         )
         .unwrap();
+    }
+}
+
+// ---- Substitution engine ----
+
+/// GET /substitutions?date=YYYY-MM-DD&status=pending
+/// List substitution records. If no date supplied, returns all active (non-resolved).
+fn substitutions_list(state: &AppState, url: &str) -> (u16, Value) {
+    let date_filter = q_param(url, "date");
+    let status_filter = q_param(url, "status");
+    let conn = state.conn.lock().unwrap();
+    let mut rows: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let mut stmt = conn.prepare(
+            "SELECT sub.id, sub.original_entry_id, sub.original_staff_id,
+                    sub.substitute_staff_id, sub.date, sub.reason, sub.status,
+                    sub.created_at, sub.resolved_at,
+                    te.period_id, te.day_of_week, te.section_id,
+                    subj.name, subj.code,
+                    orig.first_name, orig.last_name,
+                    subs_st.first_name, subs_st.last_name,
+                    sec.name, c.name
+             FROM substitutions sub
+             JOIN timetable_entries te ON te.id = sub.original_entry_id
+             LEFT JOIN subjects subj ON subj.id = te.subject_id
+             JOIN staff orig ON orig.id = sub.original_staff_id
+             LEFT JOIN staff subs_st ON subs_st.id = sub.substitute_staff_id
+             JOIN sections sec ON sec.id = te.section_id
+             JOIN classes c ON c.id = sec.class_id
+             WHERE (?1 IS NULL OR sub.date = ?1)
+               AND (?2 IS NULL OR sub.status = ?2)
+             ORDER BY sub.date DESC, sub.id DESC",
+        )?;
+        let mut r = stmt.query(params![
+            date_filter.as_deref(),
+            status_filter.as_deref()
+        ])?;
+        while let Some(row) = r.next()? {
+            let orig_first: Option<String> = row.get(14)?;
+            let orig_last: Option<String> = row.get(15)?;
+            let sub_first: Option<String> = row.get(16)?;
+            let sub_last: Option<String> = row.get(17)?;
+            rows.push(json!({
+                "id": row.get::<_, i64>(0)?,
+                "original_entry_id": row.get::<_, i64>(1)?,
+                "original_staff_id": row.get::<_, i64>(2)?,
+                "substitute_staff_id": row.get::<_, Option<i64>>(3)?,
+                "date": row.get::<_, String>(4)?,
+                "reason": row.get::<_, Option<String>>(5)?,
+                "status": row.get::<_, String>(6)?,
+                "created_at": row.get::<_, String>(7)?,
+                "resolved_at": row.get::<_, Option<String>>(8)?,
+                "period_id": row.get::<_, i64>(9)?,
+                "day_of_week": row.get::<_, i64>(10)?,
+                "section_id": row.get::<_, i64>(11)?,
+                "subject_name": row.get::<_, Option<String>>(12)?,
+                "subject_code": row.get::<_, Option<String>>(13)?,
+                "original_teacher": orig_first.map(|f| format!("{} {}", f, orig_last.unwrap_or_default()).trim().to_string()),
+                "substitute_teacher": sub_first.map(|f| format!("{} {}", f, sub_last.unwrap_or_default()).trim().to_string()),
+                "section_name": row.get::<_, Option<String>>(18)?,
+                "class_name": row.get::<_, Option<String>>(19)?,
+            }));
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"substitutions": rows, "total": rows.len()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+/// POST /substitutions/mark-absent
+/// Body: { staff_id, date, day_of_week (0=Mon…4=Fri), reason? }
+/// Creates substitution records for every timetable slot the teacher has on that day_of_week.
+fn substitution_mark_absent(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let staff_id = match v["staff_id"].as_i64() {
+        Some(id) => id,
+        None => return (422, json!({"error": "staff_id required"})),
+    };
+    let date = match v["date"].as_str() {
+        Some(d) if !d.is_empty() => d.to_string(),
+        _ => return (422, json!({"error": "date required (YYYY-MM-DD)"})),
+    };
+    let dow: i64 = match v["day_of_week"].as_i64() {
+        Some(d) if (0..=6).contains(&d) => d,
+        _ => return (422, json!({"error": "day_of_week required (0=Mon…6=Sun)"})),
+    };
+    let reason = v["reason"].as_str().map(|s| s.to_string());
+
+    let conn = state.conn.lock().unwrap();
+    // Find all timetable entries for this teacher on this day
+    let entries: Vec<i64> = {
+        let mut stmt = match conn.prepare(
+            "SELECT id FROM timetable_entries WHERE staff_id=?1 AND day_of_week=?2"
+        ) {
+            Ok(s) => s,
+            Err(e) => return (500, json!({"error": format!("{e}")})),
+        };
+        let collected: Vec<i64> = match stmt.query_map(params![staff_id, dow], |r| r.get::<_, i64>(0)) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(e) => return (500, json!({"error": format!("{e}")})),
+        }; collected
+    };
+
+    if entries.is_empty() {
+        return (200, json!({"ok": true, "created": 0, "message": "No timetable slots found for this teacher on that day"}));
+    }
+
+    let mut created = 0i64;
+    for entry_id in &entries {
+        let r = conn.execute(
+            "INSERT OR IGNORE INTO substitutions(original_entry_id, original_staff_id, date, reason, status)
+             VALUES(?1, ?2, ?3, ?4, 'pending')",
+            params![entry_id, staff_id, &date, reason.as_deref()],
+        );
+        if r.is_ok() { created += 1; }
+    }
+    (200, json!({"ok": true, "created": created, "date": date, "staff_id": staff_id}))
+}
+
+/// GET /substitutions/suggestions?substitution_id=N
+/// Returns teachers who can cover: mapped to the same subject, not already assigned in that slot+date.
+fn substitution_suggestions(state: &AppState, url: &str) -> (u16, Value) {
+    let sub_id = match q_param(url, "substitution_id").and_then(|s| s.parse::<i64>().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "substitution_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut suggestions: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        // Get the substitution + entry details
+        let (_entry_id, period_id, day, subject_id): (i64, i64, i64, Option<i64>) = conn.query_row(
+            "SELECT sub.original_entry_id, te.period_id, te.day_of_week, te.subject_id
+             FROM substitutions sub JOIN timetable_entries te ON te.id=sub.original_entry_id
+             WHERE sub.id=?1",
+            params![sub_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )?;
+
+        // Teachers who teach this subject and are NOT already busy in this period+day
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT st.id, st.first_name, st.last_name, st.profile
+             FROM teacher_subjects ts
+             JOIN staff st ON st.id = ts.staff_id
+             WHERE ts.subject_id = ?1
+               AND st.id NOT IN (
+                   SELECT staff_id FROM timetable_entries
+                   WHERE period_id=?2 AND day_of_week=?3 AND staff_id IS NOT NULL
+               )
+               AND st.id NOT IN (
+                   SELECT original_staff_id FROM substitutions
+                   WHERE date=(SELECT date FROM substitutions WHERE id=?4)
+               )
+             ORDER BY ts.priority, st.first_name",
+        )?;
+        let mut rows = stmt.query(params![subject_id.unwrap_or(-1), period_id, day, sub_id])?;
+        while let Some(r) = rows.next()? {
+            let first: Option<String> = r.get(1)?;
+            let last: Option<String> = r.get(2)?;
+            let name = format!("{} {}", first.unwrap_or_default(), last.unwrap_or_default()).trim().to_string();
+            suggestions.push(json!({
+                "staff_id": r.get::<_, i64>(0)?,
+                "name": name,
+                "profile": r.get::<_, Option<String>>(3)?,
+            }));
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"suggestions": suggestions, "total": suggestions.len()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+/// POST /substitutions/assign
+/// Body: { substitution_id, substitute_staff_id }
+fn substitution_assign(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let sub_id = match v["substitution_id"].as_i64() {
+        Some(id) => id,
+        None => return (422, json!({"error": "substitution_id required"})),
+    };
+    let sub_staff = match v["substitute_staff_id"].as_i64() {
+        Some(id) => id,
+        None => return (422, json!({"error": "substitute_staff_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE substitutions SET substitute_staff_id=?1, status='assigned' WHERE id=?2",
+        params![sub_staff, sub_id],
+    ) {
+        Ok(n) if n > 0 => (200, json!({"ok": true})),
+        Ok(_) => (404, json!({"error": "substitution not found"})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+/// POST /substitutions/resolve
+/// Body: { substitution_id }
+/// Marks a substitution as resolved (teacher returned).
+fn substitution_resolve(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let sub_id = match v["substitution_id"].as_i64() {
+        Some(id) => id,
+        None => return (422, json!({"error": "substitution_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE substitutions SET status='resolved', resolved_at=datetime('now') WHERE id=?1",
+        params![sub_id],
+    ) {
+        Ok(n) if n > 0 => (200, json!({"ok": true})),
+        Ok(_) => (404, json!({"error": "substitution not found"})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
     }
 }
 
