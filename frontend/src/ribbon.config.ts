@@ -203,7 +203,7 @@ export const ribbonTabs: RibbonTab[] = [
         id: 'admin-ctrl',
         label: 'Admin Control',
         actions: [
-          { key: 'visitor', label: 'Visitor Log', icon: UserCheck, accessLevel: 2, placeholder: true },
+          { key: 'visitor', label: 'Visitor Log', icon: UserCheck, accessLevel: 2 },
           { key: 'issued', label: 'Issued Items', icon: PackageCheck, accessLevel: 2 },
         ],
       },

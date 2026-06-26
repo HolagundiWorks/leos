@@ -30,6 +30,7 @@ import { RemindersScreen } from './components/RemindersScreen';
 import { IdCardScreen } from './components/IdCardScreen';
 import { TransportScreen } from './components/TransportScreen';
 import { IssuedItemsScreen } from './components/IssuedItemsScreen';
+import { VisitorScreen } from './components/VisitorScreen';
 import { ActivityScreen } from './components/ActivityScreen';
 import { BackupScreen } from './components/BackupScreen';
 import { SecurityScreen } from './components/SecurityScreen';
@@ -118,6 +119,8 @@ export function App() {
     screen = <TransportScreen />;
   } else if (active === 'issued') {
     screen = <IssuedItemsScreen />;
+  } else if (active === 'visitor') {
+    screen = <VisitorScreen />;
   } else if (active === 'activities') {
     screen = <ActivityScreen />;
   } else if (active === 'backup') {

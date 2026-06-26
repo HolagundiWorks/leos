@@ -553,6 +553,25 @@ fn dispatch(
     if method == &Method::Post && path == "/issued/mark" {
         return with_auth(state, token, |u| issued_mark(state, body, u));
     }
+    // Visitor log
+    if method == &Method::Get && path == "/visitors" {
+        return with_auth(state, token, |_| visitors_list(state, url));
+    }
+    if method == &Method::Post && path == "/visitors" {
+        return with_auth(state, token, |u| visitor_checkin(state, body, u));
+    }
+    if method == &Method::Post && path.starts_with("/visitors/") && path.ends_with("/checkout") {
+        let id_str = &path["/visitors/".len()..path.len() - "/checkout".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| visitor_checkout(state, id));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/visitors/") && path.ends_with("/delete") {
+        let id_str = &path["/visitors/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| visitor_delete(state, id));
+        }
+    }
     // Fee OS (P6)
     if method == &Method::Get && path == "/fee-heads" {
         return with_auth(state, token, |_| fee_heads_list(state));
@@ -1403,6 +1422,7 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS transport_stops(id INTEGER PRIMARY KEY AUTOINCREMENT, route_id INTEGER NOT NULL, name TEXT NOT NULL, pickup_time TEXT, sort_order INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS transport_assignments(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, route_id INTEGER NOT NULL, stop_id INTEGER, created_at TEXT DEFAULT (datetime('now')), UNIQUE(student_id));
          CREATE TABLE IF NOT EXISTS issued_items(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, item_type TEXT NOT NULL, issued INTEGER DEFAULT 0, issued_date TEXT, marked_by INTEGER, UNIQUE(student_id, item_type));
+         CREATE TABLE IF NOT EXISTS visitors(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT, purpose TEXT, whom_to_meet TEXT, date TEXT NOT NULL, in_time TEXT, out_time TEXT, created_by INTEGER, created_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS fee_heads(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, is_optional INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS fee_structures(id INTEGER PRIMARY KEY AUTOINCREMENT, academic_year_id INTEGER, class_id INTEGER, fee_head_id INTEGER NOT NULL, amount REAL NOT NULL, due_date TEXT, UNIQUE(academic_year_id, class_id, fee_head_id));
          CREATE TABLE IF NOT EXISTS fee_payments(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, fee_head_id INTEGER NOT NULL, academic_year_id INTEGER, amount_paid REAL NOT NULL, payment_date TEXT DEFAULT (date('now')), payment_mode TEXT DEFAULT 'cash', reference TEXT, receipt_no TEXT, collected_by INTEGER, notes TEXT, created_at TEXT DEFAULT (datetime('now')));
@@ -3130,6 +3150,65 @@ fn issued_mark(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
         Ok(_) => (200, json!({"ok": true})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Visitor log ----
+
+fn visitors_list(state: &AppState, url: &str) -> (u16, Value) {
+    // Default to today; ?date=YYYY-MM-DD to view another day.
+    let date = q_param(url, "date");
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, name, phone, purpose, whom_to_meet, date, in_time, out_time
+         FROM visitors
+         WHERE date = COALESCE(?1, date('now'))
+         ORDER BY (out_time IS NOT NULL), in_time DESC, id DESC",
+    ) { Ok(s) => s, Err(e) => return (500, json!({"error": format!("{e}")})) };
+    let rows: Vec<Value> = match stmt.query_map(params![date], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "phone": r.get::<_, Option<String>>(2)?,
+            "purpose": r.get::<_, Option<String>>(3)?,
+            "whom_to_meet": r.get::<_, Option<String>>(4)?,
+            "date": r.get::<_, String>(5)?,
+            "in_time": r.get::<_, Option<String>>(6)?,
+            "out_time": r.get::<_, Option<String>>(7)?,
+        }))
+    }) { Ok(m) => m.filter_map(|r| r.ok()).collect(), Err(e) => return (500, json!({"error": format!("{e}")})) };
+    (200, json!({"visitors": rows, "total": rows.len()}))
+}
+
+fn visitor_checkin(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str() { Some(t) if !t.is_empty() => t.to_string(), _ => return (422, json!({"error": "name required"})) };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO visitors(name, phone, purpose, whom_to_meet, date, in_time, created_by)
+         VALUES(?1,?2,?3,?4, date('now'), datetime('now'), ?5)",
+        params![
+            name,
+            v["phone"].as_str().map(|s| s.to_string()),
+            v["purpose"].as_str().map(|s| s.to_string()),
+            v["whom_to_meet"].as_str().map(|s| s.to_string()),
+            uid,
+        ],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn visitor_checkout(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("UPDATE visitors SET out_time=datetime('now') WHERE id=?1 AND out_time IS NULL", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn visitor_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM visitors WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
 }
 
 // ---- Fee OS (P6) ----
