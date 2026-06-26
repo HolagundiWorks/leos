@@ -6,8 +6,10 @@
 .inner {
   display: flex;
   align-items: stretch;
+  justify-content: center;
   height: 100%;
-  width: max-content;
+  width: 100%;
+  min-width: max-content;
   padding: 6px 8px 4px;
   gap: 2px;
 }
