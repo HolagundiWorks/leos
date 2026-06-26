@@ -1,60 +1,138 @@
-# HCW-SMS Roadmap
+# LEOS — Build Roadmap
 
-HCW School Management System — a calm, desktop-first "school operations cockpit"
-(Tauri v2 + React/Mantine + TanStack Query + Zustand) over a PHP API wrapper on
-openSIS / MariaDB. See the design intent in `docs` and the cockpit rules in the
-School OS UI Design Guide.
+Learning Environment Operating System by Holagundi Consulting Works.
+Offline-first desktop school OS: Tauri v2 + React/Mantine + Rust API + SQLite.
 
 Legend: ✅ done · 🟡 in progress · ⬜ planned
 
 ---
 
-## Phase 0 — Foundation ✅
+## Foundation (P0) ✅
 
-- ✅ Rebrand openSIS → HCW-SMS (code identifiers + branding; GPL attribution kept)
-- ✅ Podman dev stack (Apache/PHP + MariaDB 10.11); data restored into DB `hcwsms`
-- ✅ PHP API v1: bcrypt+JWT auth, `dashboard/summary`, `students`, `staff`
-- ✅ React + Mantine SPA: login, auth (Zustand + TanStack Query, 401 auto-logout)
-- ✅ Tauri v2 desktop shell; MSI + NSIS installers
-- ✅ "School OS" cockpit: utility strip, 48px icon rail, bottom context ribbon,
-  Ctrl-K command palette, Alt-1…9, Lucide icons, refreshed palette
-- ✅ Students & Staff list screens
+- ✅ Rust + SQLite API server (`tiny_http`, `rusqlite`, bcrypt, bearer auth) on `:8787`
+- ✅ React 18 + TypeScript + Vite frontend with Mantine v7
+- ✅ Tauri v2 desktop shell; Rust server embedded; MSI + NSIS installers
+- ✅ LEOS brand palette (Deep Graphite `#1E2329`, Muted Teal `#3E7B7B`)
+- ✅ School ops cockpit: utility strip + MS Office two-level tab ribbon + bottom context ribbon + `Ctrl-K` palette
+- ✅ Zustand auth store + TanStack Query v5 for server state
+- ✅ `.leosdb` portable file (ZIP: manifest + school.sqlite + media/ + checksum) — save/open
+- ✅ Academic year engine (`academic_years` table, active year selection)
+- ✅ Institution-generic terminology (School / Pre-School / College / PUC via `useTerms`)
 
-## Phase 1 — Finish the prototype (guide §19) ✅
+## Core People & Data (P1) ✅
 
-- ✅ **Student profile** — `GET /api/v1/students/{id}`; tabbed profile
-  (Profile · Attendance · Fees · Academics · Documents) with top-right alert chips
-- ✅ **Selectable rows** — selecting a student refines the bottom ribbon
-  (View profile · Edit · Print ID · Message Parent)
-- ✅ **Active work-queue dashboard** — passive stat cards replaced with a "Today"
-  needs-attention queue (`dashboard/today`: not-enrolled, no grades/courses)
-- ⬜ Wire ribbon primary actions (Add/Edit student flows; stub the rest)
+- ✅ Students — list, search, profile screen (Profile · Attendance · Fees · Academics · Documents)
+- ✅ Staff — list, search
+- ✅ Courses & Subjects — CRUD
+- ✅ Classes & Sections — CRUD
+- ✅ Teacher-Subject mapper
+- ✅ Selectable rows refine the bottom context ribbon
 
-## Phase 2 — Attendance ⬜
+## Timetable OS (P2) ✅
 
-- ⬜ Attendance schema review + seed; `GET/POST /api/v1/attendance`
-- ⬜ Mark attendance (per class, bulk), daily summary, % ; feeds dashboard absentees
+- ✅ School Timings — period slot definitions
+- ✅ Classrooms — CRUD with capacity
+- ✅ Floor-plan editor — Konva canvas, room labels, save/load per building
+- ✅ Timetable builder — cell assignment with conflict detection + teacher load tracking
+- ✅ Substitution engine
 
-## Phase 3 — Fees ⬜
+## Attendance OS (P3) ✅
 
-- ⬜ Fee structure + `collect fee` + receipts + dues; feeds dashboard pending queue
+- ✅ Per-period attendance marking
+- ✅ Quick Attendance kiosk UI (NFC / barcode HID scan mode)
+- ⬜ Attendance reports + export
 
-## Phase 4 — Exams & Grades ⬜
+## Staff OS (P4) ✅
 
-- ⬜ Exams, marks entry, publish results, report cards
+- ✅ Staff OS screen — department management, leave management
+- ✅ Payroll screen (structure stub, hooks in place)
 
-## Phase 5 — Library · Transport · Reports · Settings ⬜
+## Exam OS (P5) ✅
 
-- ⬜ Library issue/return/fines; Transport; Reports/export; Settings; bulk import
+- ✅ Exam scheduling
+- ✅ Marks entry
+- ⬜ Report cards
+- ⬜ Ranking engine
 
-## Phase 6 — Production hardening ⬜
+## Fee OS (P6) ✅
 
-- ⬜ Configurable API base (env, not hardcoded `localhost:8080`)
-- ⬜ Installer signing + LAN deployment guide; auto-update
-- ⬜ Consistent loading/empty/error states; full keyboard map; notifications
-- ⬜ User testing per guide §20 (time-on-task, wrong clicks, ribbon discoverability)
+- ✅ Fee structure
+- ✅ Payment tracking
+- ✅ Due-date alerts
+- ✅ Fee outstanding on principal dashboard
+
+## Event Management OS (P7) ✅
+
+- ✅ Announcements + Circulars
+- ✅ Meetings (today's meetings on dashboard)
+- ✅ Tasks
+
+## Activity Scheduler OS (P8) ✅
+
+- ✅ Activity creation (field trips, events)
+- ✅ Staff / class assignment
+- ✅ Itinerary
+- ✅ Auto Field Guide Generator
+
+## Principal Dashboard (P9) ✅
+
+- ✅ Active work-queue dashboard (needs-attention queue, not passive stats)
+- ✅ Stat cards (students, staff, sections, fee outstanding)
+- ✅ Today's meetings widget
+- ✅ Role-based personal dashboards (L1–L5 each get their own view)
+
+## Backup & Recovery OS (P10) ✅
+
+- ✅ `.leosdb` save / open
+- ✅ Integrity check (SHA-256 checksum in manifest)
+- ✅ Backup screen
+
+## Security & Audit (P11) ✅
+
+- ✅ Write-event audit log
+- ✅ Security screen with log viewer
+
+## External DB Connector (P12) ✅
+
+- ✅ CSV import
+- ✅ SQLite one-time import
+
+## Hardware Integration (P13) ✅
+
+- ✅ NFC / barcode HID listener (HID input → student lookup)
+- ✅ Card enrollment flow
+
+## Design Connect (P14) ✅
+
+- ✅ Canva integration (OAuth2, encrypted access + refresh token storage)
+- ✅ Design screen
+
+## Navigation & Access Control ✅
+
+- ✅ MS Office two-level tab ribbon (tab strip + contextual action ribbon)
+- ✅ 8 tabs: Home · People · Academics · Schedule · Operations · Finance · Events · System
+- ✅ L1–L5 user hierarchy with per-tab and per-action access filtering
+- ✅ Tech Admin panel — system health, module enable/disable, hierarchy editor
+- ✅ Role-based dashboards: Principal · Teacher · Accountant · Class Teacher · Parent/Support
+
+---
+
+## Pending / Upcoming
+
+| Item | Priority | Gate |
+|---|---|---|
+| Student admission form (add/edit) | High | P1 |
+| Staff create/edit form | High | P1 |
+| Attendance reports + export (PDF/Excel) | High | P3 |
+| Report cards (PDF) | Medium | P5 |
+| Ranking engine | Medium | P5 |
+| LAN server/client mode | Medium | P0 |
+| Installer signing + auto-update | Low | Production |
+| Full keyboard map + accessibility audit | Low | Production |
 
 ---
 
 ### Current focus
-Phase 1 complete. Next: Phase 2 — Attendance (mark/list + dashboard absentees feed).
+
+All P0–P14 phases complete. Upcoming: add/edit forms for students and staff (P1 gap),
+attendance report export (P3 gap), and LAN multi-user mode.

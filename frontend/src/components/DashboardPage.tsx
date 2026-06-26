@@ -17,7 +17,7 @@ import { AlertTriangle, ChevronRight, CircleAlert, GraduationCap, Info, Layers, 
 import dayjs from 'dayjs';
 import type { IconComponent } from '../icons';
 import type { AccentColor } from '../theme';
-import type { WorkItem } from '../api/client';
+import { ApiError, type WorkItem } from '../api/client';
 import { useDashboardToday } from '../hooks/useDashboardToday';
 import { useAuth } from '../stores/auth';
 
@@ -119,16 +119,22 @@ export function DashboardScreen({ onNavigate }: { onNavigate: (module: string) =
 
   const { data: statsData } = useQuery<DashStats>({
     queryKey: ['dashboard-stats'],
-    queryFn: () =>
-      fetch(`${BASE}/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new ApiError(`HTTP ${r.status}`, r.status);
+      return r.json() as Promise<DashStats>;
+    },
     enabled: !!token,
     staleTime: 120_000,
   });
 
   const { data: meetingsData } = useQuery<{ meetings: MeetingToday[] }>({
     queryKey: ['dashboard-meetings-today'],
-    queryFn: () =>
-      fetch(`${BASE}/dashboard/meetings-today`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/dashboard/meetings-today`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new ApiError(`HTTP ${r.status}`, r.status);
+      return r.json() as Promise<{ meetings: MeetingToday[] }>;
+    },
     enabled: !!token,
     staleTime: 60_000,
   });
@@ -137,7 +143,7 @@ export function DashboardScreen({ onNavigate }: { onNavigate: (module: string) =
     <Container size="xl" px={0}>
       <Stack gap="lg">
         {/* Stat cards */}
-        {statsData ? (
+        {statsData && typeof statsData.students === 'number' ? (
           <StatCards stats={statsData} onNavigate={onNavigate} />
         ) : (
           <Grid gutter="sm">

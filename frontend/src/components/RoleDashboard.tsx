@@ -13,6 +13,7 @@
 import { Badge, Button, Card, Container, Group, SimpleGrid, Skeleton, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, Bell, CalendarCheck, ClipboardList, TrendingUp, Users, Wallet } from 'lucide-react';
+import { ApiError } from '../api/client';
 import { useAuth } from '../stores/auth';
 import { profileToLevel } from '../ribbon.config';
 import { DashboardScreen } from './DashboardPage';
@@ -20,17 +21,23 @@ import { DashboardScreen } from './DashboardPage';
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 const authed = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+async function apiFetch<T>(url: string, token: string): Promise<T> {
+  const r = await fetch(url, { headers: authed(token) });
+  if (!r.ok) throw new ApiError(`HTTP ${r.status}`, r.status);
+  return r.json() as Promise<T>;
+}
+
 // ─── Teacher dashboard (L2) ───────────────────────────────────────────────────
 function TeacherDashboard({ token, onNavigate }: { token: string; onNavigate: (k: string) => void }) {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: () => fetch(`${BASE}/dashboard/stats`, { headers: authed(token) }).then((r) => r.json()),
+    queryFn: () => apiFetch(`${BASE}/dashboard/stats`, token),
     staleTime: 60_000,
   });
 
   const { data: queue } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => fetch(`${BASE}/dashboard/today`, { headers: authed(token) }).then((r) => r.json()),
+    queryFn: () => apiFetch(`${BASE}/dashboard/today`, token),
     staleTime: 30_000,
   });
 
@@ -94,13 +101,13 @@ function TeacherDashboard({ token, onNavigate }: { token: string; onNavigate: (k
 function AccountantDashboard({ token, onNavigate }: { token: string; onNavigate: (k: string) => void }) {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: () => fetch(`${BASE}/dashboard/stats`, { headers: authed(token) }).then((r) => r.json()),
+    queryFn: () => apiFetch(`${BASE}/dashboard/stats`, token),
     staleTime: 60_000,
   });
 
   const { data: queue } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => fetch(`${BASE}/dashboard/today`, { headers: authed(token) }).then((r) => r.json()),
+    queryFn: () => apiFetch(`${BASE}/dashboard/today`, token),
     staleTime: 30_000,
   });
 
@@ -138,7 +145,7 @@ function AccountantDashboard({ token, onNavigate }: { token: string; onNavigate:
 function ClassTeacherDashboard({ token, onNavigate }: { token: string; onNavigate: (k: string) => void }) {
   const { data: queue } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => fetch(`${BASE}/dashboard/today`, { headers: authed(token) }).then((r) => r.json()),
+    queryFn: () => apiFetch(`${BASE}/dashboard/today`, token),
     staleTime: 30_000,
   });
 
@@ -187,7 +194,7 @@ function ClassTeacherDashboard({ token, onNavigate }: { token: string; onNavigat
 function NoticeboardDashboard({ token }: { token: string }) {
   const { data: queue, isLoading } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => fetch(`${BASE}/dashboard/today`, { headers: authed(token) }).then((r) => r.json()),
+    queryFn: () => apiFetch(`${BASE}/dashboard/today`, token),
     staleTime: 60_000,
   });
 
