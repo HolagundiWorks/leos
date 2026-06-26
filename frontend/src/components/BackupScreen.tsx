@@ -16,6 +16,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle, Database, Download, RefreshCw, RotateCcw } from 'lucide-react';
 import { useAuth } from '../stores/auth';
+import { isTauri, pickFile, pickFolder } from '../lib/tauriDialog';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 
@@ -139,6 +140,12 @@ export function BackupScreen() {
                   onChange={(e) => setDestDir(e.currentTarget.value)}
                   placeholder="e.g. C:\Backups or /mnt/nas"
                   style={{ flex: 1 }}
+                  rightSectionWidth={isTauri ? 84 : undefined}
+                  rightSection={isTauri ? (
+                    <Button size="compact-xs" variant="light" onClick={async () => { const d = await pickFolder(); if (d) setDestDir(d); }}>
+                      Browse…
+                    </Button>
+                  ) : undefined}
                 />
               </Group>
               {config?.last_backup_at && (
@@ -217,6 +224,12 @@ export function BackupScreen() {
               value={restorePath}
               onChange={(e) => { setRestorePath(e.currentTarget.value); setConfirmRestore(false); }}
               placeholder="e.g. C:\Backups\LEOS-backup-xxxx.leosdb"
+              rightSectionWidth={isTauri ? 84 : undefined}
+              rightSection={isTauri ? (
+                <Button size="compact-xs" variant="light" onClick={async () => { const f = await pickFile(); if (f) { setRestorePath(f); setConfirmRestore(false); } }}>
+                  Browse…
+                </Button>
+              ) : undefined}
             />
             {restorePath && !confirmRestore && (
               <Button variant="outline" color="red" leftSection={<RotateCcw size={14} />} onClick={() => setConfirmRestore(true)}>

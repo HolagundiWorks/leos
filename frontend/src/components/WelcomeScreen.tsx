@@ -43,6 +43,11 @@ async function postJSON(path: string, body: object) {
  * brand-new empty one. Either way the server's active DB is swapped so login
  * validates against that file.
  */
+// Native file dialogs only exist inside the Tauri desktop app; in a plain
+// browser we fall back to the text input.
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+const LEOSDB_FILTER = [{ name: 'LEOS school file', extensions: ['leosdb'] }];
+
 export function WelcomeScreen() {
   const setSchoolOpened = useAuth((s) => s.setSchoolOpened);
   const [mode, setMode] = useState<'open' | 'create'>('open');
@@ -62,6 +67,27 @@ export function WelcomeScreen() {
   const [cPath, setCPath] = useState('');
   const [cKey, setCKey] = useState('');
   const [cKey2, setCKey2] = useState('');
+
+  const browseOpen = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const sel = await open({ multiple: false, filters: LEOSDB_FILTER });
+      if (typeof sel === 'string') setPath(sel);
+    } catch {
+      setError('File picker is only available in the desktop app.');
+    }
+  };
+
+  const browseSave = async () => {
+    try {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const suggested = `${(cName.trim() || 'My School').replace(/[^\w\- ]/g, '')}.leosdb`;
+      const sel = await save({ defaultPath: cPath || suggested, filters: LEOSDB_FILTER });
+      if (typeof sel === 'string') setCPath(sel);
+    } catch {
+      setError('File picker is only available in the desktop app.');
+    }
+  };
 
   const openSchool = async (p: string, key: string) => {
     setError(null);
@@ -117,8 +143,16 @@ export function WelcomeScreen() {
             step === 'file' ? (
               <Stack gap="sm">
                 <TextInput
-                  label="School file" placeholder="C:\path\to\My School.leosdb" value={path}
-                  onChange={(e) => setPath(e.currentTarget.value)} leftSection={<FolderOpen size={15} />} autoFocus
+                  label="School file"
+                  placeholder="C:\path\to\My School.leosdb"
+                  value={path}
+                  onChange={(e) => setPath(e.currentTarget.value)}
+                  leftSection={<FolderOpen size={15} />}
+                  rightSectionWidth={isTauri ? 84 : undefined}
+                  rightSection={isTauri ? (
+                    <Button size="compact-xs" variant="light" onClick={browseOpen}>Browse…</Button>
+                  ) : undefined}
+                  autoFocus
                 />
                 <Button disabled={!path.trim()} onClick={() => { setError(null); setStep('key'); }}>Open School File</Button>
                 <Anchor size="xs" ta="center" onClick={() => { setError(null); setMode('create'); }}>
@@ -142,10 +176,18 @@ export function WelcomeScreen() {
           ) : (
             <Stack gap="sm">
               <TextInput label="School name" placeholder="e.g. Springfield High" value={cName} onChange={(e) => setCName(e.currentTarget.value)} autoFocus />
-              <Group grow>
-                <Select label="Institution type" data={INSTITUTION_TYPES} value={cType} onChange={(v) => setCType(v ?? 'school')} allowDeselect={false} />
-                <TextInput label="File name" placeholder="auto from name" value={cPath} onChange={(e) => setCPath(e.currentTarget.value)} />
-              </Group>
+              <Select label="Institution type" data={INSTITUTION_TYPES} value={cType} onChange={(v) => setCType(v ?? 'school')} allowDeselect={false} />
+              <TextInput
+                label="Save to"
+                placeholder={isTauri ? 'Choose a location…' : 'auto from name (server folder)'}
+                value={cPath}
+                onChange={(e) => setCPath(e.currentTarget.value)}
+                leftSection={<FolderOpen size={15} />}
+                rightSectionWidth={isTauri ? 96 : undefined}
+                rightSection={isTauri ? (
+                  <Button size="compact-xs" variant="light" onClick={browseSave}>Choose…</Button>
+                ) : undefined}
+              />
               <PasswordInput label="Master key" description="Set a database password" value={cKey} onChange={(e) => setCKey(e.currentTarget.value)} leftSection={<KeyRound size={15} />} />
               <PasswordInput label="Confirm master key" value={cKey2} onChange={(e) => setCKey2(e.currentTarget.value)} leftSection={<KeyRound size={15} />} />
               <Group grow>
