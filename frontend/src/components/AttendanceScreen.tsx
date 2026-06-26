@@ -15,7 +15,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Download } from 'lucide-react';
+import { Check, Download, Monitor } from 'lucide-react';
 import { useClasses } from '../hooks/useClasses';
 import { useTimings } from '../hooks/useTimings';
 import { useAuth } from '../stores/auth';
@@ -276,7 +276,7 @@ function SummaryPanel({ token, sectionId }: { token: string; sectionId: number }
 interface FlatSection { id: number; label: string; }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
-export function AttendanceScreen() {
+export function AttendanceScreen({ onKiosk }: { onKiosk?: () => void } = {}) {
   const token = useAuth((s) => s.token)!;
   const [view, setView] = useState<'mark' | 'report'>('mark');
   const [sectionId, setSectionId] = useState<string | null>(null);
@@ -303,14 +303,21 @@ export function AttendanceScreen() {
             <Title order={2}>Attendance</Title>
             <Text c="dimmed" size="sm">Per-period attendance marking and monthly reports</Text>
           </div>
-          <SegmentedControl
-            value={view}
-            onChange={(v) => setView(v as 'mark' | 'report')}
-            data={[
-              { value: 'mark', label: 'Mark' },
-              { value: 'report', label: 'Report' },
-            ]}
-          />
+          <Group gap="sm">
+            {onKiosk && (
+              <Button size="sm" variant="subtle" leftSection={<Monitor size={14} />} onClick={onKiosk}>
+                Kiosk Mode
+              </Button>
+            )}
+            <SegmentedControl
+              value={view}
+              onChange={(v) => setView(v as 'mark' | 'report')}
+              data={[
+                { value: 'mark', label: 'Mark' },
+                { value: 'report', label: 'Report' },
+              ]}
+            />
+          </Group>
         </Group>
 
         <Card>
