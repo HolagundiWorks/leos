@@ -103,10 +103,10 @@
   color: var(--mantine-color-lavender-8);
 }
 
-/* Active module → contrasting teal accent. */
+/* Active module → contrasting blue accent. */
 .btn[data-active='true'] {
-  background: var(--mantine-color-mint-2);
-  color: var(--mantine-color-mint-9);
+  background: var(--mantine-color-brand-2);
+  color: var(--mantine-color-brand-9);
 }
 
 .btnLabel {
