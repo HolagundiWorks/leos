@@ -157,9 +157,20 @@ are the real remaining build targets. Tier = build priority; Gate = dependency.
 ### Current focus
 
 **All M1–M12 ribbon placeholder modules are now built** — no greyed modules
-remain. Also added a Tally-style **pre-login school-file gate**: launch →
-open a `.leosdb` (demo or by path) → sign in. The server auto-generates
-`demo-school.leosdb` on first run. Default credentials: **admin / ChangeMe@3201**.
+remain. Also added a Tally-style **pre-login flow**:
 
-Next candidates: attendance report export (PDF/Excel), report cards, native
-Tauri file dialog for the welcome screen, and LAN server/client mode.
+1. **Open School File** — pick a `.leosdb` (server generates `school.leosdb`
+   on first run; path prefilled)
+2. **Master key** — database password gating the file (bcrypt hash in the
+   file's `meta` table); verified before the DB is swapped in
+3. **Sign in** — validates against that file's users
+
+Defaults: master key **ChangeMe@3201**, login **admin / ChangeMe@3201**.
+
+Note: master key is an access gate (hash-verified), not yet at-rest
+encryption — SQLCipher is a future hardening step. `/school/open` is
+unauthenticated by design for the local desktop gate; restrict to localhost
+before any LAN deployment.
+
+Next candidates: change-master-key UI, at-rest encryption (SQLCipher),
+attendance report export, report cards, native Tauri file dialog, LAN mode.

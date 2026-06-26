@@ -25,12 +25,12 @@ pub fn run() {
     init_db(&conn);
     drop(conn); // release the file before snapshotting it into the demo archive
 
-    // Generate a portable demo school file on first run so the welcome screen
-    // (and new users) always have something to open.
-    if !std::path::Path::new("demo-school.leosdb").exists() {
-        match write_leosdb("demo-school.leosdb") {
-            Ok(cs) => println!("wrote demo-school.leosdb (checksum {cs})"),
-            Err(e) => eprintln!("could not write demo-school.leosdb: {e}"),
+    // Generate a portable starter school file on first run so there is always
+    // a .leosdb to open from the welcome screen.
+    if !std::path::Path::new("school.leosdb").exists() {
+        match write_leosdb("school.leosdb") {
+            Ok(cs) => println!("wrote school.leosdb (checksum {cs})"),
+            Err(e) => eprintln!("could not write school.leosdb: {e}"),
         }
     }
 
@@ -1442,6 +1442,7 @@ fn init_db(conn: &Connection) {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schools(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, academic_year TEXT, type TEXT);
          CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, role TEXT, name TEXT);
+         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
          CREATE TABLE IF NOT EXISTS students(id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT, middle_name TEXT, last_name TEXT, email TEXT, phone TEXT, gender TEXT, birthdate TEXT, alt_id TEXT, enrolled INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS staff(id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, profile TEXT, title TEXT);
          CREATE TABLE IF NOT EXISTS courses(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
@@ -1590,6 +1591,14 @@ fn seed(conn: &Connection) {
     conn.execute(
         "INSERT INTO users(username, password_hash, role, name) VALUES(?1, ?2, ?3, ?4)",
         params!["admin", hash, "admin", "Abhi Ram"],
+    )
+    .unwrap();
+
+    // Master key (database password) — gates opening the school file before login.
+    let mk_hash = bcrypt::hash("ChangeMe@3201", bcrypt::DEFAULT_COST).unwrap();
+    conn.execute(
+        "INSERT OR REPLACE INTO meta(key, value) VALUES('master_key_hash', ?1)",
+        params![mk_hash],
     )
     .unwrap();
 
@@ -4697,22 +4706,59 @@ fn leosdb_open(state: &AppState, body: &str) -> (u16, Value) {
         Some(p) if !p.is_empty() => p.to_string(),
         _ => return (422, json!({"error": "path required"})),
     };
-    match read_leosdb(state, &path) {
+    let master_key = v["master_key"].as_str().unwrap_or("").to_string();
+
+    // Pull the candidate DB out of the archive (without touching the live one).
+    let sqlite_bytes = match extract_leosdb_sqlite(&path) {
+        Ok(b) => b,
+        Err(e) => return (500, json!({"error": format!("open failed: {e}")})),
+    };
+
+    // Verify the master key against the file's stored hash before swapping.
+    match verify_master_key(&sqlite_bytes, &master_key) {
+        Ok(true) => {}
+        Ok(false) => return (401, json!({"error": "Invalid master key"})),
+        Err(e) => return (500, json!({"error": format!("open failed: {e}")})),
+    }
+
+    match swap_active_db(state, &sqlite_bytes) {
         Ok(()) => (200, json!({"ok": true, "opened": path})),
         Err(e) => (500, json!({"error": format!("open failed: {e}")})),
     }
 }
 
-fn read_leosdb(state: &AppState, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+/// Read the school.sqlite bytes out of a .leosdb archive.
+fn extract_leosdb_sqlite(path: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let file = std::fs::File::open(path)?;
     let mut archive = zip::ZipArchive::new(file)?;
     let mut sqlite_bytes = Vec::new();
     archive.by_name("school.sqlite")?.read_to_end(&mut sqlite_bytes)?;
-    // Swap the live connection: close it, replace the working DB, reopen.
+    Ok(sqlite_bytes)
+}
+
+/// Check the supplied master key against the hash stored in the candidate DB's
+/// `meta` table. Files without a stored hash (legacy) are accepted.
+fn verify_master_key(sqlite_bytes: &[u8], key: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    let tmp = std::env::temp_dir().join(format!("leos-verify-{}.sqlite", std::process::id()));
+    std::fs::write(&tmp, sqlite_bytes)?;
+    let conn = Connection::open(&tmp)?;
+    let stored: Option<String> = conn
+        .query_row("SELECT value FROM meta WHERE key='master_key_hash'", [], |r| r.get(0))
+        .ok();
+    drop(conn);
+    let _ = std::fs::remove_file(&tmp);
+    match stored {
+        Some(hash) => Ok(bcrypt::verify(key, &hash).unwrap_or(false)),
+        None => Ok(true), // legacy file with no master key set
+    }
+}
+
+/// Replace the live working DB with the given sqlite bytes.
+fn swap_active_db(state: &AppState, sqlite_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let mut g = state.conn.lock().unwrap();
     let old = std::mem::replace(&mut *g, Connection::open_in_memory()?);
     drop(old);
-    std::fs::write("school.sqlite", &sqlite_bytes)?;
+    std::fs::write("school.sqlite", sqlite_bytes)?;
     *g = Connection::open("school.sqlite")?;
     Ok(())
 }
