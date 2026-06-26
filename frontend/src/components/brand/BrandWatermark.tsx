@@ -28,8 +28,8 @@ export function HolagundiWordmark({ title }: { title?: string }) {
         textLength="480"
         lengthAdjust="spacing"
         fontFamily="'Helvetica Neue', Arial, sans-serif"
-        fontWeight={500}
-        fontSize={52}
+        fontWeight={400}
+        fontSize={50}
       >
         CONSULTING WURKZ
       </text>
