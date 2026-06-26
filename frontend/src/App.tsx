@@ -22,6 +22,7 @@ import { AcademicYearScreen } from './components/AcademicYearScreen';
 import { SubstitutionScreen } from './components/SubstitutionScreen';
 import { AttendanceScreen } from './components/AttendanceScreen';
 import { AttendanceKiosk } from './components/AttendanceKiosk';
+import { StaffOSScreen } from './components/StaffOSScreen';
 import { Placeholder } from './components/Placeholder';
 
 // Auth gate + cockpit shell. Active module drives the workspace + ribbon;
@@ -84,6 +85,8 @@ export function App() {
     screen = <AttendanceScreen onKiosk={() => navigate('attendance-kiosk')} />;
   } else if (active === 'attendance-kiosk') {
     screen = <AttendanceKiosk onExit={() => navigate('attendance')} />;
+  } else if (active === 'staff-os') {
+    screen = <StaffOSScreen />;
   } else if (active === 'floorplan') {
     screen = <FloorPlanScreen />;
   } else if (active === 'academic-year') {

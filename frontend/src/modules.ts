@@ -7,6 +7,7 @@ import {
   BookOpen,
   BookUp,
   Book,
+  Building2,
   Bus,
   CalendarCheck,
   CalendarDays,
@@ -86,6 +87,15 @@ export const modules: ModuleDef[] = [
       { key: 'edit', label: 'Edit', icon: Pencil },
       { key: 'assign', label: 'Assign', icon: ClipboardList },
       { key: 'message', label: 'Message', icon: MessageSquare },
+    ],
+  },
+  {
+    key: 'staff-os',
+    label: 'Staff OS',
+    icon: Building2,
+    actions: [
+      { key: 'department', label: 'Add Department', icon: Plus, shortcut: 'Ctrl N' },
+      { key: 'leave', label: 'Leave Requests', icon: CalendarOff },
     ],
   },
   {
@@ -253,7 +263,7 @@ export interface ModuleGroup {
 }
 export const moduleGroups: ModuleGroup[] = [
   { label: 'Overview', keys: ['dashboard'] },
-  { label: 'People', keys: ['students', 'staff'] },
+  { label: 'People', keys: ['students', 'staff', 'staff-os'] },
   { label: 'Academics', keys: ['classes', 'teacher-subjects', 'courses', 'subjects', 'classrooms', 'floorplan'] },
   { label: 'Schedule', keys: ['timetable', 'substitution', 'timings'] },
   { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport'] },

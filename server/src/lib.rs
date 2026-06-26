@@ -262,6 +262,38 @@ fn dispatch(
     if method == &Method::Post && path == "/substitutions/resolve" {
         return with_auth(state, token, |_| substitution_resolve(state, body));
     }
+    // Staff OS (P4) — Departments
+    if method == &Method::Get && path == "/departments" {
+        return with_auth(state, token, |_| departments_list(state));
+    }
+    if method == &Method::Post && path == "/departments" {
+        return with_auth(state, token, |_| department_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/departments/") && path.ends_with("/update") {
+        let id_str = &path["/departments/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| department_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/departments/") && path.ends_with("/delete") {
+        let id_str = &path["/departments/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| department_delete(state, id));
+        }
+    }
+    // Staff OS — Leave management
+    if method == &Method::Get && path == "/leave" {
+        return with_auth(state, token, |_| leave_list(state, url));
+    }
+    if method == &Method::Post && path == "/leave" {
+        return with_auth(state, token, |uid| leave_create(state, uid, body));
+    }
+    if method == &Method::Post && path == "/leave/approve" {
+        return with_auth(state, token, |uid| leave_approve(state, uid, body));
+    }
+    if method == &Method::Post && path == "/leave/reject" {
+        return with_auth(state, token, |uid| leave_reject(state, uid, body));
+    }
     // Attendance OS (P3)
     if method == &Method::Get && path == "/section-students" {
         return with_auth(state, token, |_| section_students_list(state, url));
@@ -666,6 +698,17 @@ fn dashboard_today(state: &AppState) -> Vec<Value> {
 
 // ---- helpers ----
 
+/// Tomohiko Sakamoto DOW: returns 0=Mon..6=Sun from "YYYY-MM-DD"
+fn date_to_dow(date: &str) -> Option<i64> {
+    let parts: Vec<i64> = date.split('-').filter_map(|s| s.parse().ok()).collect();
+    if parts.len() < 3 { return None; }
+    let (y, m, d) = (parts[0], parts[1], parts[2]);
+    let t = [0i64, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    let yy = if m < 3 { y - 1 } else { y };
+    let sunday_based = (yy + yy/4 - yy/100 + yy/400 + t[(m-1) as usize] + d) % 7;
+    Some((sunday_based + 6) % 7) // convert: 0=Mon
+}
+
 fn q_param(url: &str, key: &str) -> Option<String> {
     let qs = url.split('?').nth(1)?;
     for pair in qs.split('&') {
@@ -722,6 +765,8 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS academic_years(id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL, start_date TEXT, end_date TEXT, is_active INTEGER DEFAULT 0, is_closed INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS terms(id INTEGER PRIMARY KEY AUTOINCREMENT, year_id INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE, label TEXT NOT NULL, start_date TEXT, end_date TEXT, is_active INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS substitutions(id INTEGER PRIMARY KEY AUTOINCREMENT, original_entry_id INTEGER NOT NULL, original_staff_id INTEGER NOT NULL, substitute_staff_id INTEGER, date TEXT NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')), resolved_at TEXT, UNIQUE(original_entry_id, date));
+         CREATE TABLE IF NOT EXISTS departments(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, head_staff_id INTEGER);
+         CREATE TABLE IF NOT EXISTS leave_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL, leave_type TEXT DEFAULT 'sick', from_date TEXT NOT NULL, to_date TEXT NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', approved_by INTEGER, approved_at TEXT, created_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS section_students(id INTEGER PRIMARY KEY AUTOINCREMENT, section_id INTEGER NOT NULL, student_id INTEGER NOT NULL, enrolled_date TEXT, UNIQUE(section_id, student_id));
          CREATE TABLE IF NOT EXISTS student_attendance(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, section_id INTEGER NOT NULL, date TEXT NOT NULL, period_id INTEGER NOT NULL, status TEXT DEFAULT 'present', marked_by INTEGER, note TEXT, marked_at TEXT DEFAULT (datetime('now')), UNIQUE(student_id, date, period_id));",
     )
@@ -737,6 +782,7 @@ fn init_db(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN department TEXT", []);
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN join_date TEXT", []);
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN employee_id TEXT", []);
+    let _ = conn.execute("ALTER TABLE staff ADD COLUMN department_id INTEGER", []);
 
     if count(conn, "SELECT COUNT(*) FROM users") == 0 {
         seed(conn);
@@ -1031,6 +1077,204 @@ fn substitution_resolve(state: &AppState, body: &str) -> (u16, Value) {
         Ok(_) => (404, json!({"error": "substitution not found"})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Staff OS (P4) ----
+
+fn departments_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT d.id, d.name, d.head_staff_id,
+                st.first_name, st.last_name,
+                COUNT(s.id) AS staff_count
+         FROM departments d
+         LEFT JOIN staff st ON st.id = d.head_staff_id
+         LEFT JOIN staff s ON s.department_id = d.id
+         GROUP BY d.id
+         ORDER BY d.name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map([], |r| {
+        let hid: Option<i64> = r.get(2)?;
+        let hfn: Option<String> = r.get(3)?;
+        let hln: Option<String> = r.get(4)?;
+        let head_name = match (hfn.as_deref(), hln.as_deref()) {
+            (Some(f), Some(l)) => Some(format!("{f} {l}")),
+            (Some(f), None) => Some(f.to_string()),
+            (None, Some(l)) => Some(l.to_string()),
+            _ => None,
+        };
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "head_staff_id": hid,
+            "head_name": head_name,
+            "staff_count": r.get::<_, Option<i64>>(5)?.unwrap_or(0),
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"departments": rows, "total": total}))
+}
+
+fn department_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str() {
+        Some(n) if !n.is_empty() => n.to_string(),
+        _ => return (422, json!({"error": "name required"})),
+    };
+    let head_id = v["head_staff_id"].as_i64();
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO departments(name, head_staff_id) VALUES(?1, ?2)",
+        params![name, head_id],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn department_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = v["name"].as_str().map(|s| s.to_string());
+    let head_id = v["head_staff_id"].as_i64();
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "UPDATE departments SET name=COALESCE(?1, name), head_staff_id=COALESCE(?2, head_staff_id) WHERE id=?3",
+        params![name, head_id, id],
+    );
+    (200, json!({"ok": true}))
+}
+
+fn department_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    // Clear FK on staff before deleting
+    let _ = conn.execute("UPDATE staff SET department_id=NULL WHERE department_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM departments WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn leave_list(state: &AppState, url: &str) -> (u16, Value) {
+    let status = q_param(url, "status");
+    let staff_id: Option<i64> = q_param(url, "staff_id").and_then(|v| v.parse().ok());
+    let conn = state.conn.lock().unwrap();
+    let sql = "SELECT lr.id, lr.staff_id, st.first_name, st.last_name,
+                      lr.leave_type, lr.from_date, lr.to_date, lr.reason,
+                      lr.status, lr.approved_by, lr.created_at
+               FROM leave_requests lr
+               JOIN staff st ON st.id = lr.staff_id
+               WHERE (?1 IS NULL OR lr.status = ?1)
+                 AND (?2 IS NULL OR lr.staff_id = ?2)
+               ORDER BY lr.created_at DESC";
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![status, staff_id], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "staff_id": r.get::<_, i64>(1)?,
+            "first_name": r.get::<_, Option<String>>(2)?,
+            "last_name": r.get::<_, Option<String>>(3)?,
+            "leave_type": r.get::<_, Option<String>>(4)?,
+            "from_date": r.get::<_, String>(5)?,
+            "to_date": r.get::<_, String>(6)?,
+            "reason": r.get::<_, Option<String>>(7)?,
+            "status": r.get::<_, String>(8)?,
+            "approved_by": r.get::<_, Option<i64>>(9)?,
+            "created_at": r.get::<_, String>(10)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"leave_requests": rows, "total": total}))
+}
+
+fn leave_create(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let staff_id = v["staff_id"].as_i64().unwrap_or(uid);
+    let leave_type = v["leave_type"].as_str().unwrap_or("sick");
+    let from_date = match v["from_date"].as_str() {
+        Some(d) if !d.is_empty() => d.to_string(),
+        _ => return (422, json!({"error": "from_date required"})),
+    };
+    let to_date = match v["to_date"].as_str() {
+        Some(d) if !d.is_empty() => d.to_string(),
+        _ => return (422, json!({"error": "to_date required"})),
+    };
+    let reason = v["reason"].as_str().map(|s| s.to_string());
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO leave_requests(staff_id, leave_type, from_date, to_date, reason) VALUES(?1,?2,?3,?4,?5)",
+        params![staff_id, leave_type, from_date, to_date, reason],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn leave_approve(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let id = match v["id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    // Fetch leave request to get staff_id + dates for substitution trigger
+    let leave = conn.query_row(
+        "SELECT staff_id, from_date, to_date FROM leave_requests WHERE id=?1",
+        params![id],
+        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+    );
+    let _ = conn.execute(
+        "UPDATE leave_requests SET status='approved', approved_by=?1, approved_at=datetime('now') WHERE id=?2",
+        params![uid, id],
+    );
+    // Auto-create substitution records for first leave day (timetable DOW match)
+    if let Ok((staff_id, from, _to)) = &leave {
+        if let Some(dow) = date_to_dow(from) {
+            let entries: Vec<i64> = {
+                let mut stmt = match conn.prepare(
+                    "SELECT id FROM timetable_entries WHERE staff_id=?1 AND day_of_week=?2"
+                ) {
+                    Ok(s) => s,
+                    Err(_) => return (200, json!({"ok": true})),
+                };
+                let collected: Vec<i64> = match stmt.query_map(params![staff_id, dow], |r| r.get::<_, i64>(0)) {
+                    Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                    Err(_) => vec![],
+                }; collected
+            };
+            for entry_id in entries {
+                let _ = conn.execute(
+                    "INSERT OR IGNORE INTO substitutions(original_entry_id, original_staff_id, date, reason, status)
+                     VALUES(?1, ?2, ?3, 'Leave approved', 'pending')",
+                    params![entry_id, staff_id, from],
+                );
+            }
+        }
+    }
+    (200, json!({"ok": true}))
+}
+
+fn leave_reject(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let id = match v["id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "UPDATE leave_requests SET status='rejected', approved_by=?1, approved_at=datetime('now') WHERE id=?2",
+        params![uid, id],
+    );
+    (200, json!({"ok": true}))
 }
 
 // ---- Attendance OS (P3) ----
