@@ -165,11 +165,11 @@ fn dispatch(
     if method == &Method::Post && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_save(state, body));
     }
-    if method == &Method::Post && path == "/schoolpkg/save" {
-        return with_auth(state, token, |_| schoolpkg_save(body));
+    if method == &Method::Post && path == "/schooldb/save" {
+        return with_auth(state, token, |_| schooldb_save(body));
     }
-    if method == &Method::Post && path == "/schoolpkg/open" {
-        return with_auth(state, token, |_| schoolpkg_open(state, body));
+    if method == &Method::Post && path == "/schooldb/open" {
+        return with_auth(state, token, |_| schooldb_open(state, body));
     }
     (404, json!({"error": "not found"}))
 }
@@ -532,22 +532,22 @@ fn seed(conn: &Connection) {
     }
 }
 
-// ---- .schoolpkg portable file (ZIP: manifest + school.sqlite + media/docs) ----
+// ---- .schooldb portable file (ZIP: manifest + school.sqlite + media/docs) ----
 
-fn schoolpkg_save(body: &str) -> (u16, Value) {
+fn schooldb_save(body: &str) -> (u16, Value) {
     let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
     let out = v["path"]
         .as_str()
         .filter(|s| !s.is_empty())
-        .unwrap_or("HCW-SMS.schoolpkg")
+        .unwrap_or("HCW-SMS.schooldb")
         .to_string();
-    match write_schoolpkg(&out) {
+    match write_schooldb(&out) {
         Ok(checksum) => (200, json!({"ok": true, "path": out, "checksum": checksum})),
         Err(e) => (500, json!({"error": format!("save failed: {e}")})),
     }
 }
 
-fn write_schoolpkg(out: &str) -> Result<String, Box<dyn std::error::Error>> {
+fn write_schooldb(out: &str) -> Result<String, Box<dyn std::error::Error>> {
     use std::io::Write;
     let sqlite_bytes = std::fs::read("school.sqlite")?;
     let checksum = sha256_hex(&sqlite_bytes);
@@ -574,19 +574,19 @@ fn write_schoolpkg(out: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok(checksum)
 }
 
-fn schoolpkg_open(state: &AppState, body: &str) -> (u16, Value) {
+fn schooldb_open(state: &AppState, body: &str) -> (u16, Value) {
     let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
     let path = match v["path"].as_str() {
         Some(p) if !p.is_empty() => p.to_string(),
         _ => return (422, json!({"error": "path required"})),
     };
-    match read_schoolpkg(state, &path) {
+    match read_schooldb(state, &path) {
         Ok(()) => (200, json!({"ok": true, "opened": path})),
         Err(e) => (500, json!({"error": format!("open failed: {e}")})),
     }
 }
 
-fn read_schoolpkg(state: &AppState, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn read_schooldb(state: &AppState, path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let file = std::fs::File::open(path)?;
     let mut archive = zip::ZipArchive::new(file)?;
     let mut sqlite_bytes = Vec::new();

@@ -16,7 +16,7 @@
 # Local SQLite DB + portable school files created by the Rust server.
 *.sqlite
 *.sqlite-*
-*.schoolpkg
+*.schooldb
 
 # Tooling / local
 /.claude/
