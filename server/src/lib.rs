@@ -201,6 +201,9 @@ fn dispatch(
             return with_auth(state, token, |_| section_delete(state, id));
         }
     }
+    if method == &Method::Get && path == "/timetable/all" {
+        return with_auth(state, token, |_| timetable_all(state));
+    }
     if method == &Method::Get && path == "/timetable" {
         return with_auth(state, token, |_| timetable_list(state, url));
     }
@@ -1262,6 +1265,66 @@ fn classes_list(state: &AppState) -> (u16, Value) {
 }
 
 // ---- timetable builder ----
+
+fn timetable_all(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut sections: Vec<Value> = Vec::new();
+    let mut entries: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        // All sections with class info
+        let mut s = conn.prepare(
+            "SELECT sec.id, sec.name, c.id, c.name, c.grade_level
+             FROM sections sec JOIN classes c ON c.id = sec.class_id
+             ORDER BY c.grade_level, c.name, sec.name",
+        )?;
+        let mut rows = s.query([])?;
+        while let Some(r) = rows.next()? {
+            sections.push(json!({
+                "id": r.get::<_, i64>(0)?,
+                "name": r.get::<_, Option<String>>(1)?,
+                "class_id": r.get::<_, i64>(2)?,
+                "class_name": r.get::<_, Option<String>>(3)?,
+                "grade_level": r.get::<_, Option<String>>(4)?,
+            }));
+        }
+        // All timetable entries
+        let mut e = conn.prepare(
+            "SELECT te.id, te.section_id, te.period_id, te.day_of_week,
+                    te.subject_id, subj.name, subj.code,
+                    te.staff_id, st.first_name, st.last_name,
+                    te.room_id, r.name
+             FROM timetable_entries te
+             LEFT JOIN subjects subj ON subj.id = te.subject_id
+             LEFT JOIN staff st ON st.id = te.staff_id
+             LEFT JOIN classrooms r ON r.id = te.room_id
+             ORDER BY te.section_id, te.day_of_week, te.period_id",
+        )?;
+        let mut rows = e.query([])?;
+        while let Some(r) = rows.next()? {
+            let first: Option<String> = r.get(8)?;
+            let last: Option<String> = r.get(9)?;
+            let teacher = first.map(|f| format!("{} {}", f, last.unwrap_or_default()).trim().to_string());
+            entries.push(json!({
+                "id": r.get::<_, i64>(0)?,
+                "section_id": r.get::<_, i64>(1)?,
+                "period_id": r.get::<_, i64>(2)?,
+                "day_of_week": r.get::<_, i64>(3)?,
+                "subject_id": r.get::<_, Option<i64>>(4)?,
+                "subject_name": r.get::<_, Option<String>>(5)?,
+                "subject_code": r.get::<_, Option<String>>(6)?,
+                "staff_id": r.get::<_, Option<i64>>(7)?,
+                "teacher_name": teacher,
+                "room_id": r.get::<_, Option<i64>>(10)?,
+                "room_name": r.get::<_, Option<String>>(11)?,
+            }));
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"sections": sections, "entries": entries})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
 
 fn timetable_list(state: &AppState, url: &str) -> (u16, Value) {
     let section_id = match q_param(url, "section_id").and_then(|s| s.parse::<i64>().ok()) {
