@@ -279,6 +279,15 @@ export const modules: ModuleDef[] = [
       { key: 'add', label: 'New Year', icon: Plus, shortcut: 'Ctrl N' },
     ],
   },
+  {
+    key: 'backup',
+    label: 'Backup',
+    icon: Download,
+    actions: [
+      { key: 'run', label: 'Run Backup', icon: Download },
+      { key: 'restore', label: 'Restore', icon: RotateCcw },
+    ],
+  },
   { key: 'settings', label: 'Settings', icon: Settings, actions: [] },
 ];
 
@@ -297,5 +306,5 @@ export const moduleGroups: ModuleGroup[] = [
   { label: 'Academics', keys: ['classes', 'teacher-subjects', 'courses', 'subjects', 'classrooms', 'floorplan'] },
   { label: 'Schedule', keys: ['timetable', 'substitution', 'timings'] },
   { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport', 'payroll', 'events', 'activities'] },
-  { label: 'System', keys: ['academic-year', 'settings'] },
+  { label: 'System', keys: ['academic-year', 'backup', 'settings'] },
 ];

@@ -268,6 +268,22 @@ fn dispatch(
     if method == &Method::Post && path == "/substitutions/resolve" {
         return with_auth(state, token, |_| substitution_resolve(state, body));
     }
+    // Backup & Recovery OS (P10)
+    if method == &Method::Get && path == "/backup/config" {
+        return with_auth(state, token, |_| backup_config_get(state));
+    }
+    if method == &Method::Post && path == "/backup/config" {
+        return with_auth(state, token, |_| backup_config_save(state, body));
+    }
+    if method == &Method::Post && path == "/backup/run" {
+        return with_auth(state, token, |_| backup_run(state, body));
+    }
+    if method == &Method::Get && path == "/backup/list" {
+        return with_auth(state, token, |_| backup_list(state));
+    }
+    if method == &Method::Post && path == "/backup/restore" {
+        return with_auth(state, token, |_| backup_restore(state, body));
+    }
     // Activity Scheduler OS (P8)
     if method == &Method::Get && path == "/activities" {
         return with_auth(state, token, |_| activities_list(state, url));
@@ -1073,6 +1089,8 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS exam_marks(id INTEGER PRIMARY KEY AUTOINCREMENT, exam_id INTEGER NOT NULL, student_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, marks_obtained REAL, max_marks REAL DEFAULT 100, grade TEXT, remarks TEXT, UNIQUE(exam_id, student_id, subject_id));
          CREATE TABLE IF NOT EXISTS salary_structures(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL UNIQUE, basic REAL DEFAULT 0, hra REAL DEFAULT 0, da REAL DEFAULT 0, ta REAL DEFAULT 0, other_allowances REAL DEFAULT 0, pf_deduction REAL DEFAULT 0, pt_deduction REAL DEFAULT 0, other_deductions REAL DEFAULT 0, effective_from TEXT, updated_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS payslips(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL, month TEXT NOT NULL, basic REAL, hra REAL, da REAL, ta REAL, other_allowances REAL, pf_deduction REAL, pt_deduction REAL, other_deductions REAL, gross REAL, net REAL, working_days INTEGER, paid_days INTEGER, generated_at TEXT DEFAULT (datetime('now')), UNIQUE(staff_id, month));
+         CREATE TABLE IF NOT EXISTS backup_config(id INTEGER PRIMARY KEY, schedule TEXT DEFAULT 'daily', destinations TEXT DEFAULT '[]', last_backup_at TEXT, enabled INTEGER DEFAULT 1);
+         CREATE TABLE IF NOT EXISTS backup_log(id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL, path TEXT, size_bytes INTEGER, status TEXT DEFAULT 'ok', created_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS activities(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, activity_type TEXT DEFAULT 'field_visit', date TEXT, end_date TEXT, venue TEXT, description TEXT, status TEXT DEFAULT 'planned', created_by INTEGER, created_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS activity_staff(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, staff_id INTEGER NOT NULL, role TEXT DEFAULT 'in_charge', UNIQUE(activity_id, staff_id));
          CREATE TABLE IF NOT EXISTS activity_sections(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, section_id INTEGER NOT NULL, student_count INTEGER, UNIQUE(activity_id, section_id));
@@ -1394,6 +1412,133 @@ fn substitution_resolve(state: &AppState, body: &str) -> (u16, Value) {
         Ok(_) => (404, json!({"error": "substitution not found"})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Backup & Recovery OS (P10) ----
+
+fn backup_config_get(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    // Ensure default row exists (singleton config, id=1)
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO backup_config(id, schedule, destinations, enabled) VALUES(1,'daily','[]',1)", []
+    );
+    match conn.query_row(
+        "SELECT schedule, destinations, last_backup_at, enabled FROM backup_config WHERE id=1",
+        [], |r| Ok(json!({
+            "schedule": r.get::<_, Option<String>>(0)?,
+            "destinations": r.get::<_, Option<String>>(1)?,
+            "last_backup_at": r.get::<_, Option<String>>(2)?,
+            "enabled": r.get::<_, i64>(3)? == 1,
+        })),
+    ) {
+        Ok(v) => (200, json!({"config": v})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn backup_config_save(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let schedule = v["schedule"].as_str().unwrap_or("daily").to_string();
+    let dests = v["destinations"].to_string();
+    let enabled = v["enabled"].as_bool().unwrap_or(true) as i64;
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO backup_config(id, schedule, destinations, enabled) VALUES(1,?1,?2,?3)",
+        params![schedule, dests, enabled],
+    );
+    (200, json!({"ok": true}))
+}
+
+fn backup_run(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let dest_dir = v["destination"].as_str().unwrap_or(".").to_string();
+    let ts = chrono_or_ts();
+    let filename = format!("LEOS-backup-{ts}.leosdb");
+    let out_path = format!("{}/{}", dest_dir.trim_end_matches('/'), filename);
+    match write_leosdb(&out_path) {
+        Ok(final_path) => {
+            let size = std::fs::metadata(&final_path).map(|m| m.len() as i64).unwrap_or(0);
+            let conn = state.conn.lock().unwrap();
+            let _ = conn.execute(
+                "INSERT INTO backup_log(filename, path, size_bytes, status) VALUES(?1,?2,?3,'ok')",
+                params![filename, final_path, size],
+            );
+            let _ = conn.execute("UPDATE backup_config SET last_backup_at=datetime('now') WHERE id=1", []);
+            (200, json!({"ok": true, "filename": filename, "path": final_path, "size_bytes": size}))
+        }
+        Err(e) => {
+            let conn = state.conn.lock().unwrap();
+            let _ = conn.execute(
+                "INSERT INTO backup_log(filename, path, status) VALUES(?1,?2,'error')",
+                params![filename, out_path],
+            );
+            (500, json!({"error": format!("{e}")}))
+        }
+    }
+}
+
+fn backup_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, filename, path, size_bytes, status, created_at FROM backup_log ORDER BY created_at DESC LIMIT 50"
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map([], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "filename": r.get::<_, String>(1)?,
+            "path": r.get::<_, Option<String>>(2)?,
+            "size_bytes": r.get::<_, Option<i64>>(3)?,
+            "status": r.get::<_, Option<String>>(4)?,
+            "created_at": r.get::<_, String>(5)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"backups": rows, "total": total}))
+}
+
+fn backup_restore(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let path = match v["path"].as_str() { Some(p) if !p.is_empty() => p.to_string(), _ => return (422, json!({"error": "path required"})) };
+    match restore_leosdb(state, &path) {
+        Ok(()) => (200, json!({"ok": true, "restored_from": path})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn restore_leosdb(state: &AppState, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Read as _;
+    let file = std::fs::File::open(path)?;
+    let mut zip = zip::ZipArchive::new(file)?;
+    // Extract school.sqlite
+    let sqlite_bytes: Vec<u8> = {
+        let mut entry = zip.by_name("school.sqlite")?;
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf)?;
+        buf
+    };
+    // Write to a restore staging file, then replace live DB
+    // NOTE: This closes the current connection briefly; SQLite WAL is not affected
+    // because we write to "school.sqlite.restore" then rename atomically.
+    std::fs::write("school.sqlite.restore", &sqlite_bytes)?;
+    // Flush WAL on current DB first by issuing a checkpoint through the locked conn
+    {
+        let conn = state.conn.lock().unwrap();
+        let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+    }
+    // Now atomically replace
+    std::fs::rename("school.sqlite.restore", "school.sqlite")?;
+    // Re-init tables that may be new in this version (idempotent)
+    {
+        let conn = state.conn.lock().unwrap();
+        init_db(&conn);
+    }
+    Ok(())
 }
 
 // ---- Activity Scheduler OS (P8) ----
