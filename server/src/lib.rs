@@ -262,6 +262,40 @@ fn dispatch(
     if method == &Method::Post && path == "/substitutions/resolve" {
         return with_auth(state, token, |_| substitution_resolve(state, body));
     }
+    // Exam OS (P5)
+    if method == &Method::Get && path == "/exams" {
+        return with_auth(state, token, |_| exams_list(state, url));
+    }
+    if method == &Method::Post && path == "/exams" {
+        return with_auth(state, token, |_| exam_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/exams/") && path.ends_with("/update") {
+        let id_str = &path["/exams/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| exam_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/exams/") && path.ends_with("/delete") {
+        let id_str = &path["/exams/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| exam_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/exam-schedules" {
+        return with_auth(state, token, |_| exam_schedules_list(state, url));
+    }
+    if method == &Method::Post && path == "/exam-schedules" {
+        return with_auth(state, token, |_| exam_schedule_save(state, body));
+    }
+    if method == &Method::Get && path == "/exam-marks" {
+        return with_auth(state, token, |_| exam_marks_list(state, url));
+    }
+    if method == &Method::Post && path == "/exam-marks" {
+        return with_auth(state, token, |_| exam_marks_save(state, body));
+    }
+    if method == &Method::Get && path == "/exam-marks/report" {
+        return with_auth(state, token, |_| exam_marks_report(state, url));
+    }
     // Staff OS (P4) — Departments
     if method == &Method::Get && path == "/departments" {
         return with_auth(state, token, |_| departments_list(state));
@@ -780,6 +814,9 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS substitutions(id INTEGER PRIMARY KEY AUTOINCREMENT, original_entry_id INTEGER NOT NULL, original_staff_id INTEGER NOT NULL, substitute_staff_id INTEGER, date TEXT NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')), resolved_at TEXT, UNIQUE(original_entry_id, date));
          CREATE TABLE IF NOT EXISTS departments(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, head_staff_id INTEGER);
          CREATE TABLE IF NOT EXISTS leave_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL, leave_type TEXT DEFAULT 'sick', from_date TEXT NOT NULL, to_date TEXT NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', approved_by INTEGER, approved_at TEXT, created_at TEXT DEFAULT (datetime('now')));
+         CREATE TABLE IF NOT EXISTS exams(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, exam_type TEXT DEFAULT 'unit', academic_year_id INTEGER, term_id INTEGER, start_date TEXT, end_date TEXT, created_at TEXT DEFAULT (datetime('now')));
+         CREATE TABLE IF NOT EXISTS exam_schedules(id INTEGER PRIMARY KEY AUTOINCREMENT, exam_id INTEGER NOT NULL, subject_id INTEGER, section_id INTEGER, date TEXT, start_time TEXT, end_time TEXT, room_id INTEGER, invigilator_id INTEGER, UNIQUE(exam_id, subject_id, section_id));
+         CREATE TABLE IF NOT EXISTS exam_marks(id INTEGER PRIMARY KEY AUTOINCREMENT, exam_id INTEGER NOT NULL, student_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, marks_obtained REAL, max_marks REAL DEFAULT 100, grade TEXT, remarks TEXT, UNIQUE(exam_id, student_id, subject_id));
          CREATE TABLE IF NOT EXISTS salary_structures(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL UNIQUE, basic REAL DEFAULT 0, hra REAL DEFAULT 0, da REAL DEFAULT 0, ta REAL DEFAULT 0, other_allowances REAL DEFAULT 0, pf_deduction REAL DEFAULT 0, pt_deduction REAL DEFAULT 0, other_deductions REAL DEFAULT 0, effective_from TEXT, updated_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS payslips(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL, month TEXT NOT NULL, basic REAL, hra REAL, da REAL, ta REAL, other_allowances REAL, pf_deduction REAL, pt_deduction REAL, other_deductions REAL, gross REAL, net REAL, working_days INTEGER, paid_days INTEGER, generated_at TEXT DEFAULT (datetime('now')), UNIQUE(staff_id, month));
          CREATE TABLE IF NOT EXISTS section_students(id INTEGER PRIMARY KEY AUTOINCREMENT, section_id INTEGER NOT NULL, student_id INTEGER NOT NULL, enrolled_date TEXT, UNIQUE(section_id, student_id));
@@ -1092,6 +1129,280 @@ fn substitution_resolve(state: &AppState, body: &str) -> (u16, Value) {
         Ok(_) => (404, json!({"error": "substitution not found"})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Exam OS (P5) ----
+
+fn exams_list(state: &AppState, url: &str) -> (u16, Value) {
+    let year_id: Option<i64> = q_param(url, "year_id").and_then(|v| v.parse().ok());
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, name, exam_type, academic_year_id, term_id, start_date, end_date, created_at
+         FROM exams
+         WHERE (?1 IS NULL OR academic_year_id=?1)
+         ORDER BY start_date DESC, name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![year_id], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "exam_type": r.get::<_, Option<String>>(2)?,
+            "academic_year_id": r.get::<_, Option<i64>>(3)?,
+            "term_id": r.get::<_, Option<i64>>(4)?,
+            "start_date": r.get::<_, Option<String>>(5)?,
+            "end_date": r.get::<_, Option<String>>(6)?,
+            "created_at": r.get::<_, String>(7)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"exams": rows, "total": total}))
+}
+
+fn exam_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str() {
+        Some(n) if !n.is_empty() => n.to_string(),
+        _ => return (422, json!({"error": "name required"})),
+    };
+    let exam_type = v["exam_type"].as_str().unwrap_or("unit").to_string();
+    let year_id = v["academic_year_id"].as_i64();
+    let term_id = v["term_id"].as_i64();
+    let start = v["start_date"].as_str().map(|s| s.to_string());
+    let end = v["end_date"].as_str().map(|s| s.to_string());
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO exams(name, exam_type, academic_year_id, term_id, start_date, end_date) VALUES(?1,?2,?3,?4,?5,?6)",
+        params![name, exam_type, year_id, term_id, start, end],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn exam_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "UPDATE exams SET name=COALESCE(?1,name), exam_type=COALESCE(?2,exam_type),
+         start_date=?3, end_date=?4 WHERE id=?5",
+        params![
+            v["name"].as_str().filter(|s| !s.is_empty()),
+            v["exam_type"].as_str(),
+            v["start_date"].as_str().map(|s| s.to_string()),
+            v["end_date"].as_str().map(|s| s.to_string()),
+            id
+        ],
+    );
+    (200, json!({"ok": true}))
+}
+
+fn exam_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM exam_marks WHERE exam_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM exam_schedules WHERE exam_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM exams WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn exam_schedules_list(state: &AppState, url: &str) -> (u16, Value) {
+    let exam_id: i64 = match q_param(url, "exam_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "exam_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT es.id, es.exam_id, es.subject_id, subj.name, subj.code,
+                es.section_id, sec.name, c.name,
+                es.date, es.start_time, es.end_time,
+                es.room_id, r.name,
+                es.invigilator_id, st.first_name, st.last_name
+         FROM exam_schedules es
+         LEFT JOIN subjects subj ON subj.id = es.subject_id
+         LEFT JOIN sections sec ON sec.id = es.section_id
+         LEFT JOIN classes c ON c.id = sec.class_id
+         LEFT JOIN classrooms r ON r.id = es.room_id
+         LEFT JOIN staff st ON st.id = es.invigilator_id
+         WHERE es.exam_id = ?1
+         ORDER BY es.date, es.start_time, subj.name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![exam_id], |r| {
+        let ifn: Option<String> = r.get(14)?;
+        let iln: Option<String> = r.get(15)?;
+        let inv_name: Option<String> = match (ifn.as_deref(), iln.as_deref()) {
+            (Some(f), Some(l)) => Some(format!("{f} {l}")),
+            (Some(f), None) => Some(f.to_string()),
+            (None, Some(l)) => Some(l.to_string()),
+            _ => None,
+        };
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "exam_id": r.get::<_, i64>(1)?,
+            "subject_id": r.get::<_, Option<i64>>(2)?,
+            "subject_name": r.get::<_, Option<String>>(3)?,
+            "subject_code": r.get::<_, Option<String>>(4)?,
+            "section_id": r.get::<_, Option<i64>>(5)?,
+            "section_name": r.get::<_, Option<String>>(6)?,
+            "class_name": r.get::<_, Option<String>>(7)?,
+            "date": r.get::<_, Option<String>>(8)?,
+            "start_time": r.get::<_, Option<String>>(9)?,
+            "end_time": r.get::<_, Option<String>>(10)?,
+            "room_id": r.get::<_, Option<i64>>(11)?,
+            "room_name": r.get::<_, Option<String>>(12)?,
+            "invigilator_id": r.get::<_, Option<i64>>(13)?,
+            "invigilator_name": inv_name,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"schedules": rows, "total": total}))
+}
+
+fn exam_schedule_save(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let exam_id = match v["exam_id"].as_i64() { Some(x) => x, None => return (422, json!({"error": "exam_id required"})) };
+    let subject_id = v["subject_id"].as_i64();
+    let section_id = v["section_id"].as_i64();
+    let date = v["date"].as_str().map(|s| s.to_string());
+    let start = v["start_time"].as_str().map(|s| s.to_string());
+    let end = v["end_time"].as_str().map(|s| s.to_string());
+    let room_id = v["room_id"].as_i64();
+    let inv_id = v["invigilator_id"].as_i64();
+    let conn = state.conn.lock().unwrap();
+    let r = conn.execute(
+        "INSERT INTO exam_schedules(exam_id,subject_id,section_id,date,start_time,end_time,room_id,invigilator_id)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+         ON CONFLICT(exam_id,subject_id,section_id) DO UPDATE SET
+           date=excluded.date, start_time=excluded.start_time, end_time=excluded.end_time,
+           room_id=excluded.room_id, invigilator_id=excluded.invigilator_id",
+        params![exam_id, subject_id, section_id, date, start, end, room_id, inv_id],
+    );
+    match r {
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn exam_marks_list(state: &AppState, url: &str) -> (u16, Value) {
+    let exam_id: i64 = match q_param(url, "exam_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "exam_id required"})),
+    };
+    let subject_id: Option<i64> = q_param(url, "subject_id").and_then(|v| v.parse().ok());
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT em.id, em.exam_id, em.student_id, s.first_name, s.last_name,
+                em.subject_id, subj.name, subj.code,
+                em.marks_obtained, em.max_marks, em.grade, em.remarks
+         FROM exam_marks em
+         JOIN students s ON s.id = em.student_id
+         LEFT JOIN subjects subj ON subj.id = em.subject_id
+         WHERE em.exam_id=?1 AND (?2 IS NULL OR em.subject_id=?2)
+         ORDER BY s.first_name, s.last_name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![exam_id, subject_id], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "exam_id": r.get::<_, i64>(1)?,
+            "student_id": r.get::<_, i64>(2)?,
+            "first_name": r.get::<_, Option<String>>(3)?,
+            "last_name": r.get::<_, Option<String>>(4)?,
+            "subject_id": r.get::<_, i64>(5)?,
+            "subject_name": r.get::<_, Option<String>>(6)?,
+            "subject_code": r.get::<_, Option<String>>(7)?,
+            "marks_obtained": r.get::<_, Option<f64>>(8)?,
+            "max_marks": r.get::<_, Option<f64>>(9)?,
+            "grade": r.get::<_, Option<String>>(10)?,
+            "remarks": r.get::<_, Option<String>>(11)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"marks": rows, "total": total}))
+}
+
+fn exam_marks_save(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let exam_id = match v["exam_id"].as_i64() { Some(x) => x, None => return (422, json!({"error": "exam_id required"})) };
+    let records = match v["records"].as_array() { Some(r) => r.clone(), None => return (422, json!({"error": "records required"})) };
+    let conn = state.conn.lock().unwrap();
+    let mut saved = 0i64;
+    for rec in &records {
+        let student_id = rec["student_id"].as_i64().unwrap_or(0);
+        let subject_id = rec["subject_id"].as_i64().unwrap_or(0);
+        let marks = rec["marks_obtained"].as_f64();
+        let max = rec["max_marks"].as_f64();
+        let grade = rec["grade"].as_str().map(|s| s.to_string());
+        let remarks = rec["remarks"].as_str().map(|s| s.to_string());
+        let _ = conn.execute(
+            "INSERT INTO exam_marks(exam_id,student_id,subject_id,marks_obtained,max_marks,grade,remarks)
+             VALUES(?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(exam_id,student_id,subject_id) DO UPDATE SET
+               marks_obtained=excluded.marks_obtained, max_marks=excluded.max_marks,
+               grade=excluded.grade, remarks=excluded.remarks",
+            params![exam_id, student_id, subject_id, marks, max, grade, remarks],
+        );
+        saved += 1;
+    }
+    (200, json!({"ok": true, "saved": saved}))
+}
+
+fn exam_marks_report(state: &AppState, url: &str) -> (u16, Value) {
+    let exam_id: i64 = match q_param(url, "exam_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "exam_id required"})),
+    };
+    let section_id: Option<i64> = q_param(url, "section_id").and_then(|v| v.parse().ok());
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT em.student_id, s.first_name, s.last_name,
+                SUM(em.marks_obtained) as total_obtained,
+                SUM(em.max_marks) as total_max,
+                COUNT(em.id) as subjects_count
+         FROM exam_marks em
+         JOIN students s ON s.id = em.student_id
+         LEFT JOIN section_students ss ON ss.student_id = em.student_id
+         WHERE em.exam_id=?1 AND (?2 IS NULL OR ss.section_id=?2)
+         GROUP BY em.student_id, s.first_name, s.last_name
+         ORDER BY total_obtained DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![exam_id, section_id], |r| {
+        let obtained: f64 = r.get::<_, Option<f64>>(3)?.unwrap_or(0.0);
+        let max: f64 = r.get::<_, Option<f64>>(4)?.unwrap_or(0.0);
+        let pct = if max > 0.0 { obtained / max * 100.0 } else { 0.0 };
+        Ok(json!({
+            "student_id": r.get::<_, i64>(0)?,
+            "first_name": r.get::<_, Option<String>>(1)?,
+            "last_name": r.get::<_, Option<String>>(2)?,
+            "total_obtained": obtained,
+            "total_max": max,
+            "subjects_count": r.get::<_, Option<i64>>(5)?.unwrap_or(0),
+            "percentage": (pct * 10.0).round() / 10.0,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"report": rows, "total": total}))
 }
 
 // ---- Staff OS (P4) ----
