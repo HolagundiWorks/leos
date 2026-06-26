@@ -41,6 +41,7 @@ builds.) Login is now **`admin` / `admin123`**.
 | Excel (SheetJS/ExcelJS) | — | ⬜ |
 | PDF generator | — | ⬜ |
 | Drag & drop (dnd-kit) | — | ⬜ (needed for timetable) |
+| Canvas + PDF (Konva + pdf.js) | ✅ floor-plan editor | ✅ |
 | UI lib | Mantine | ✅ (satisfies "custom design system") |
 | Icons | Lucide | ✅ |
 
@@ -54,7 +55,7 @@ builds.) Login is now **`admin` / `admin123`**.
 | 4 | Staff/Teacher Management | 🟡 | list done |
 | 5 | Course & Subject | 🟡 | list screens + seed (CBSE Class 8 · 8 subjects); create/edit pending |
 | 6 | Teacher-Subject Mapper | ⬜ | up to 3 teachers/subject, priority |
-| 7 | Classroom & Lab | 🟡 | list screen + seed (7 rooms/labs); floor-plan editor (PDF + canvas) next |
+| 7 | Classroom & Lab | 🟡 | list + seed (7 rooms/labs); **floor-plan editor** ✅ — PDF import (pdf.js) + Konva canvas, draw/label/move/resize rooms by type, link rects to Classroom records, persisted (`/floorplan`) |
 | 8 | **Timetable Builder** | ⬜ | **centerpiece** — drag-drop, conflict detection, auto-assist |
 | 9 | Substitution | ⬜ | absence → affected slots → suggest → approve |
 | 10 | Attendance | ⬜ | placeholder only (work-queue surfaces "not enrolled") |

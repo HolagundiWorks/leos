@@ -17,9 +17,12 @@
     "@mantine/spotlight": "^7.17.8",
     "@tanstack/react-query": "^5.101.1",
     "dayjs": "^1.11.13",
+    "konva": "^10.3.0",
     "lucide-react": "^1.21.0",
+    "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-konva": "^18.2.16",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

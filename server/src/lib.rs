@@ -120,6 +120,12 @@ fn dispatch(
     if method == &Method::Get && path == "/classrooms" {
         return with_auth(state, token, |_| classrooms_list(state));
     }
+    if method == &Method::Get && path == "/floorplan" {
+        return with_auth(state, token, |_| floorplan_get(state));
+    }
+    if method == &Method::Post && path == "/floorplan" {
+        return with_auth(state, token, |_| floorplan_save(state, body));
+    }
     if method == &Method::Post && path == "/schoolpkg/save" {
         return with_auth(state, token, |_| schoolpkg_save(body));
     }
@@ -396,6 +402,7 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS subjects(id INTEGER PRIMARY KEY AUTOINCREMENT, course_id INTEGER, name TEXT, code TEXT, type TEXT, weekly_periods INTEGER DEFAULT 0, is_lab INTEGER DEFAULT 0, mandatory INTEGER DEFAULT 1);
          CREATE TABLE IF NOT EXISTS gradelevels(id INTEGER PRIMARY KEY AUTOINCREMENT, short_name TEXT, title TEXT);
          CREATE TABLE IF NOT EXISTS classrooms(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, code TEXT, capacity INTEGER, room_type TEXT, is_active INTEGER DEFAULT 1);
+         CREATE TABLE IF NOT EXISTS floorplans(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, data TEXT);
          CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);",
     )
     .expect("create schema");
@@ -678,5 +685,58 @@ fn classrooms_list(state: &AppState) -> (u16, Value) {
     match res {
         Ok(()) => (200, json!({"classrooms": list, "total": list.len()})),
         Err(_) => (500, json!({"error": "query failed"})),
+    }
+}
+
+// ---- floor plan (canvas layout persisted as JSON) ----
+
+fn floorplan_get(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let row = conn.query_row(
+        "SELECT id, name, data FROM floorplans ORDER BY id LIMIT 1",
+        [],
+        |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        },
+    );
+    match row {
+        Ok((id, name, data)) => {
+            let parsed: Value = data
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or(Value::Null);
+            (200, json!({"plan": {"id": id, "name": name, "data": parsed}}))
+        }
+        Err(_) => (200, json!({"plan": Value::Null})),
+    }
+}
+
+fn floorplan_save(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = v["name"].as_str().unwrap_or("Floor Plan").to_string();
+    let data = serde_json::to_string(&v["data"]).unwrap_or_else(|_| "null".to_string());
+    let conn = state.conn.lock().unwrap();
+    let existing: Option<i64> = conn
+        .query_row("SELECT id FROM floorplans ORDER BY id LIMIT 1", [], |r| r.get(0))
+        .ok();
+    match existing {
+        Some(id) => {
+            let _ = conn.execute(
+                "UPDATE floorplans SET name=?1, data=?2 WHERE id=?3",
+                params![name, data, id],
+            );
+            (200, json!({"ok": true, "id": id}))
+        }
+        None => {
+            let _ = conn.execute(
+                "INSERT INTO floorplans(name, data) VALUES(?1,?2)",
+                params![name, data],
+            );
+            (200, json!({"ok": true, "id": conn.last_insert_rowid()}))
+        }
     }
 }

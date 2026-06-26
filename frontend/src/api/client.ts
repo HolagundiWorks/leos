@@ -200,3 +200,36 @@ export interface ClassroomsResponse {
 export function fetchClassrooms(token: string) {
   return req<ClassroomsResponse>('/classrooms', { token });
 }
+
+export interface RoomShape {
+  id: string;
+  type: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  classroomId?: number | null;
+}
+export interface FloorPlanData {
+  bg?: string | null;
+  bgWidth?: number;
+  bgHeight?: number;
+  rooms: RoomShape[];
+}
+export interface FloorPlan {
+  id: number;
+  name: string | null;
+  data: FloorPlanData | null;
+}
+export async function fetchFloorPlan(token: string): Promise<FloorPlan | null> {
+  const res = await req<{ plan: FloorPlan | null }>('/floorplan', { token });
+  return res.plan;
+}
+export function saveFloorPlan(token: string, data: FloorPlanData) {
+  return req<{ ok: boolean; id: number }>('/floorplan', {
+    method: 'POST',
+    token,
+    body: { name: 'Floor Plan', data },
+  });
+}

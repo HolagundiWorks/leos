@@ -34,6 +34,9 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  Map,
+  Save,
+  Upload,
 } from 'lucide-react';
 import type { IconComponent } from './icons';
 
@@ -107,6 +110,16 @@ export const modules: ModuleDef[] = [
       { key: 'add', label: 'Add Room', icon: Plus, shortcut: 'Ctrl N' },
       { key: 'edit', label: 'Edit', icon: Pencil },
       { key: 'report', label: 'Report', icon: FileText },
+    ],
+  },
+  {
+    key: 'floorplan',
+    label: 'Floor Plan',
+    icon: Map,
+    actions: [
+      { key: 'import', label: 'Import PDF', icon: Upload },
+      { key: 'add', label: 'Add Room', icon: Plus, shortcut: 'Ctrl N' },
+      { key: 'save', label: 'Save', icon: Save, shortcut: 'Ctrl S' },
     ],
   },
   {
