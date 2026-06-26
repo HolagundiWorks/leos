@@ -5,7 +5,7 @@
 export function HolagundiWordmark({ title }: { title?: string }) {
   return (
     <svg
-      viewBox="0 0 480 100"
+      viewBox="0 0 480 120"
       role="img"
       aria-label={title ?? 'Holagundi Consulting Wurkz'}
       fill="currentColor"
@@ -13,23 +13,23 @@ export function HolagundiWordmark({ title }: { title?: string }) {
     >
       <text
         x="0"
-        y="46"
+        y="70"
         textLength="480"
-        lengthAdjust="spacingAndGlyphs"
+        lengthAdjust="spacing"
         fontFamily="'Helvetica Neue', Arial, sans-serif"
         fontWeight={800}
-        fontSize={54}
+        fontSize={82}
       >
         HOLAGUNDI
       </text>
       <text
         x="0"
-        y="92"
+        y="112"
         textLength="480"
-        lengthAdjust="spacingAndGlyphs"
+        lengthAdjust="spacing"
         fontFamily="'Helvetica Neue', Arial, sans-serif"
         fontWeight={500}
-        fontSize={40}
+        fontSize={52}
       >
         CONSULTING WURKZ
       </text>
