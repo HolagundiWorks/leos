@@ -177,8 +177,8 @@ export const ribbonTabs: RibbonTab[] = [
         id: 'monitoring',
         label: 'Monitoring',
         actions: [
-          { key: 'daily-sched', label: 'Daily Schedule', icon: CalendarCheck, accessLevel: 3, placeholder: true },
-          { key: 'room-occ', label: 'Room Status', icon: DoorOpen, accessLevel: 2, placeholder: true },
+          { key: 'daily-sched', label: 'Daily Schedule', icon: CalendarCheck, accessLevel: 3 },
+          { key: 'room-occ', label: 'Room Status', icon: DoorOpen, accessLevel: 2 },
         ],
       },
     ],
@@ -259,8 +259,8 @@ export const ribbonTabs: RibbonTab[] = [
         id: 'event-docs',
         label: 'Documents',
         actions: [
-          { key: 'parent-guide', label: 'Parent Guide', icon: FileText, accessLevel: 2, placeholder: true },
-          { key: 'itinerary', label: 'Itinerary', icon: PenLine, accessLevel: 2, placeholder: true },
+          { key: 'parent-guide', label: 'Parent Guide', icon: FileText, accessLevel: 2 },
+          { key: 'itinerary', label: 'Itinerary', icon: PenLine, accessLevel: 2 },
         ],
       },
     ],

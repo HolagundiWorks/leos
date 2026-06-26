@@ -18,6 +18,7 @@ import { BrandWatermark } from './brand/BrandWatermark';
 
 export function LoginPage() {
   const signIn = useAuth((s) => s.signIn);
+  const setSchoolOpened = useAuth((s) => s.setSchoolOpened);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +81,20 @@ export function LoginPage() {
               </Button>
             </Stack>
           </form>
+
+          <Stack gap={4} align="center">
+            <Text size="xs" c="dimmed" ta="center">
+              Default sign-in: <Text span fw={600}>admin</Text> / <Text span fw={600}>ChangeMe@3201</Text>
+            </Text>
+            <Text
+              size="xs"
+              c="brand"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setSchoolOpened(false)}
+            >
+              ← Open a different school file
+            </Text>
+          </Stack>
         </Stack>
       </Card>
     </Center>

@@ -132,10 +132,10 @@ are the real remaining build targets. Tier = build priority; Gate = dependency.
 | M6 | Finance Reports (collections + outstanding) | Finance | Medium | Fee OS (P6) | ✅ done |
 | M7 | Scholarships / concessions | Finance | Medium | Fee OS (P6) | ✅ done |
 | M8 | Receipts history / reprint | Finance | Low | Fee OS (P6) ✅ collect+print exists | ⬜ |
-| M9 | Daily Schedule view | Schedule | Low | Timetable (P2) | ⬜ |
-| M10 | Room Status / occupancy | Schedule | Low | Timetable + Classrooms | ⬜ |
-| M11 | Parent Guide (activity) | Events | Low | Activities (P8) | ⬜ |
-| M12 | Itinerary (activity) | Events | Low | Activities (P8) | ⬜ |
+| M9 | Daily Schedule view | Schedule | Low | Timetable (P2) | ✅ done |
+| M10 | Room Status / occupancy | Schedule | Low | Timetable + Classrooms | ✅ done |
+| M11 | Parent Guide (activity) | Events | Low | Activities (P8) | ✅ via Activities → Field Guide |
+| M12 | Itinerary (activity) | Events | Low | Activities (P8) | ✅ via Activities |
 
 **Already built — placeholder was misleading (de-placeholder/remove):**
 - Admissions → works via **Students → Admit** (`StudentFormModal`)
@@ -156,7 +156,10 @@ are the real remaining build targets. Tier = build priority; Gate = dependency.
 
 ### Current focus
 
-P0–P14 core phases done, but **12 ribbon placeholder modules remain unbuilt**
-(table above) — the earlier "all complete" note was inaccurate. Building the
-backlog top-down: **M1 ID Cards** first (leverages existing student data + the
-Hardware NFC card-enrollment module), then Transport.
+**All M1–M12 ribbon placeholder modules are now built** — no greyed modules
+remain. Also added a Tally-style **pre-login school-file gate**: launch →
+open a `.leosdb` (demo or by path) → sign in. The server auto-generates
+`demo-school.leosdb` on first run. Default credentials: **admin / ChangeMe@3201**.
+
+Next candidates: attendance report export (PDF/Excel), report cards, native
+Tauri file dialog for the welcome screen, and LAN server/client mode.

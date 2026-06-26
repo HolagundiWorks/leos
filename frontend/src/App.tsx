@@ -3,6 +3,7 @@ import type { SessionUser } from './types';
 import { useAuth } from './stores/auth';
 import { useSelection } from './stores/selection';
 import { BackgroundLayer } from './components/BackgroundLayer';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { LoginPage } from './components/LoginPage';
 import { CockpitShell } from './components/cockpit/CockpitShell';
 import { StudentsScreen } from './components/StudentsScreen';
@@ -34,6 +35,7 @@ import { VisitorScreen } from './components/VisitorScreen';
 import { LibraryScreen } from './components/LibraryScreen';
 import { FinanceReportScreen } from './components/FinanceReportScreen';
 import { ScholarshipScreen } from './components/ScholarshipScreen';
+import { ScheduleViewScreen } from './components/ScheduleViewScreen';
 import { ActivityScreen } from './components/ActivityScreen';
 import { BackupScreen } from './components/BackupScreen';
 import { SecurityScreen } from './components/SecurityScreen';
@@ -49,8 +51,19 @@ import { Placeholder } from './components/Placeholder';
 export function App() {
   const token = useAuth((s) => s.token);
   const user = useAuth((s) => s.user);
+  const schoolOpened = useAuth((s) => s.schoolOpened);
   const [active, setActive] = useState('dashboard');
   const [studentId, setStudentId] = useState<number | null>(null);
+
+  // Gate 1: open a school file. Gate 2: sign in.
+  if (!schoolOpened) {
+    return (
+      <>
+        <BackgroundLayer />
+        <WelcomeScreen />
+      </>
+    );
+  }
 
   if (!token || !user) {
     return (
@@ -130,6 +143,12 @@ export function App() {
     screen = <FinanceReportScreen />;
   } else if (active === 'scholarships') {
     screen = <ScholarshipScreen />;
+  } else if (active === 'daily-sched') {
+    screen = <ScheduleViewScreen defaultTab="daily" />;
+  } else if (active === 'room-occ') {
+    screen = <ScheduleViewScreen defaultTab="rooms" />;
+  } else if (active === 'parent-guide' || active === 'itinerary') {
+    screen = <ActivityScreen />;
   } else if (active === 'activities') {
     screen = <ActivityScreen />;
   } else if (active === 'backup') {

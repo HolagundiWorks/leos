@@ -23,6 +23,18 @@ struct AppState {
 pub fn run() {
     let conn = Connection::open("school.sqlite").expect("open sqlite");
     init_db(&conn);
+    drop(conn); // release the file before snapshotting it into the demo archive
+
+    // Generate a portable demo school file on first run so the welcome screen
+    // (and new users) always have something to open.
+    if !std::path::Path::new("demo-school.leosdb").exists() {
+        match write_leosdb("demo-school.leosdb") {
+            Ok(cs) => println!("wrote demo-school.leosdb (checksum {cs})"),
+            Err(e) => eprintln!("could not write demo-school.leosdb: {e}"),
+        }
+    }
+
+    let conn = Connection::open("school.sqlite").expect("reopen sqlite");
     let state = Arc::new(AppState {
         conn: Mutex::new(conn),
         sessions: Mutex::new(HashMap::new()),
@@ -221,6 +233,9 @@ fn dispatch(
     }
     if method == &Method::Get && path == "/timetable" {
         return with_auth(state, token, |_| timetable_list(state, url));
+    }
+    if method == &Method::Get && path == "/timetable/day" {
+        return with_auth(state, token, |_| timetable_day(state, url));
     }
     if method == &Method::Get && path == "/timetable/quota" {
         return with_auth(state, token, |_| timetable_quota(state, url));
@@ -756,6 +771,11 @@ fn dispatch(
     }
     if method == &Method::Post && path == "/leosdb/open" {
         return with_auth(state, token, |_| leosdb_open(state, body));
+    }
+    // Pre-login school-file gate (desktop): open a .leosdb before authenticating,
+    // so login validates against the chosen file's users. No token required.
+    if method == &Method::Post && path == "/school/open" {
+        return leosdb_open(state, body);
     }
     if method == &Method::Get && path == "/academic-years" {
         return with_auth(state, token, |_| academic_years_list(state));
@@ -1566,7 +1586,7 @@ fn seed(conn: &Connection) {
     )
     .unwrap();
 
-    let hash = bcrypt::hash("admin123", bcrypt::DEFAULT_COST).unwrap();
+    let hash = bcrypt::hash("ChangeMe@3201", bcrypt::DEFAULT_COST).unwrap();
     conn.execute(
         "INSERT INTO users(username, password_hash, role, name) VALUES(?1, ?2, ?3, ?4)",
         params!["admin", hash, "admin", "Abhi Ram"],
@@ -5226,6 +5246,66 @@ fn timetable_list(state: &AppState, url: &str) -> (u16, Value) {
             let total = entries.len();
             (200, json!({"entries": entries, "total": total}))
         }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+/// All timetable entries for one weekday across every section, joined with
+/// section / class / subject / teacher / room / period names + times. Powers
+/// the Daily Schedule and Room Status views.
+fn timetable_day(state: &AppState, url: &str) -> (u16, Value) {
+    let day = q_param(url, "day").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+    let conn = state.conn.lock().unwrap();
+    let mut entries: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let mut stmt = conn.prepare(
+            "SELECT te.id, te.section_id, sec.name, cls.name,
+                    te.period_id, p.label, p.start_time, p.end_time, p.sort_order,
+                    subj.name, subj.code,
+                    st.first_name, st.last_name,
+                    te.room_id, r.name
+             FROM timetable_entries te
+             LEFT JOIN sections sec ON sec.id = te.section_id
+             LEFT JOIN classes cls ON cls.id = sec.class_id
+             LEFT JOIN periods p ON p.id = te.period_id
+             LEFT JOIN subjects subj ON subj.id = te.subject_id
+             LEFT JOIN staff st ON st.id = te.staff_id
+             LEFT JOIN classrooms r ON r.id = te.room_id
+             WHERE te.day_of_week = ?1
+             ORDER BY p.sort_order, p.start_time, sec.name",
+        )?;
+        let mut rows = stmt.query(params![day])?;
+        while let Some(r) = rows.next()? {
+            let first: Option<String> = r.get(11)?;
+            let last: Option<String> = r.get(12)?;
+            let teacher = first.map(|f| format!("{} {}", f, last.unwrap_or_default()).trim().to_string());
+            let cls: Option<String> = r.get(3)?;
+            let sec: Option<String> = r.get(2)?;
+            let section_label = match (cls, sec) {
+                (Some(c), Some(s)) => format!("{c} — {s}"),
+                (None, Some(s)) => s,
+                _ => "—".to_string(),
+            };
+            entries.push(json!({
+                "id": r.get::<_, i64>(0)?,
+                "section_id": r.get::<_, i64>(1)?,
+                "section_label": section_label,
+                "period_id": r.get::<_, i64>(4)?,
+                "period_label": r.get::<_, Option<String>>(5)?,
+                "start_time": r.get::<_, Option<String>>(6)?,
+                "end_time": r.get::<_, Option<String>>(7)?,
+                "sort_order": r.get::<_, Option<i64>>(8)?,
+                "subject_name": r.get::<_, Option<String>>(9)?,
+                "subject_code": r.get::<_, Option<String>>(10)?,
+                "teacher_name": teacher,
+                "room_id": r.get::<_, Option<i64>>(13)?,
+                "room_name": r.get::<_, Option<String>>(14)?,
+            }));
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"entries": entries, "total": entries.len(), "day": day})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
 }
