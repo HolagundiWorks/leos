@@ -15,3 +15,11 @@
 .hcw-ui--fullscreen {
   min-height: 100vh;
 }
+
+/* Work-queue rows on the dashboard. */
+.hcw-workrow {
+  transition: background 120ms ease;
+}
+.hcw-workrow:hover {
+  background: var(--mantine-color-gray-1);
+}

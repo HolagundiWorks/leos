@@ -26,8 +26,8 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
   (Profile · Attendance · Fees · Academics · Documents) with top-right alert chips
 - ⬜ **Selectable tables** — row selection refines the bottom ribbon (Edit · View ·
   Collect Fee · Print ID · Message Parent)
-- ⬜ **Active work-queue dashboard** — replace passive stat cards with a "Today"
-  needs-attention queue (start from real data-quality items; enrich later)
+- ✅ **Active work-queue dashboard** — passive stat cards replaced with a "Today"
+  needs-attention queue (`dashboard/today`: not-enrolled, no grades/courses)
 - ⬜ Wire ribbon primary actions (Add/Edit student flows; stub the rest)
 
 ## Phase 2 — Attendance ⬜

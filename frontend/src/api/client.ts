@@ -76,6 +76,19 @@ export async function fetchDashboardSummary(token: string) {
   return summary;
 }
 
+export interface WorkItem {
+  key: string;
+  count: number;
+  label: string;
+  severity: 'info' | 'warning' | 'danger';
+  module: string;
+}
+
+export async function fetchDashboardToday(token: string) {
+  const { items } = await req<{ items: WorkItem[] }>('/dashboard/today', { token });
+  return items;
+}
+
 export interface Student {
   id: number;
   first_name: string;

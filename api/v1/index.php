@@ -54,6 +54,10 @@ switch ("$method $route") {
         require_user();
         json_out(['summary' => dashboard_summary()]);
 
+    case 'GET dashboard/today':
+        require_user();
+        json_out(['items' => dashboard_today()]);
+
     case 'GET students':
         require_user();
         $q = trim((string) ($_GET['q'] ?? ''));
@@ -80,6 +84,34 @@ function dashboard_summary(): array
         'schools'  => (int) db_scalar('SELECT COUNT(*) FROM schools'),
         'courses'  => (int) db_scalar('SELECT COUNT(DISTINCT COURSE_ID) FROM courses'),
     ];
+}
+
+// Active "needs attention" work queue computed from the live data.
+function dashboard_today(): array
+{
+    $totalStudents = (int) db_scalar('SELECT COUNT(*) FROM students');
+    $enrolled = (int) db_scalar('SELECT COUNT(DISTINCT STUDENT_ID) FROM student_enrollment');
+    $notEnrolled = max(0, $totalStudents - $enrolled);
+    $courses = (int) db_scalar('SELECT COUNT(*) FROM courses');
+    $grades = (int) db_scalar('SELECT COUNT(*) FROM school_gradelevels');
+    $noContact = (int) db_scalar(
+        "SELECT COUNT(*) FROM students WHERE (email IS NULL OR email='') AND (phone IS NULL OR phone='')"
+    );
+
+    $items = [];
+    if ($notEnrolled > 0) {
+        $items[] = ['key' => 'enroll', 'count' => $notEnrolled, 'label' => 'students not enrolled in a class', 'severity' => 'warning', 'module' => 'students'];
+    }
+    if ($grades === 0) {
+        $items[] = ['key' => 'grades', 'count' => 0, 'label' => 'Define grade levels for the school', 'severity' => 'info', 'module' => 'settings'];
+    }
+    if ($courses === 0) {
+        $items[] = ['key' => 'courses', 'count' => 0, 'label' => 'Set up your first course', 'severity' => 'info', 'module' => 'courses'];
+    }
+    if ($noContact > 0) {
+        $items[] = ['key' => 'contact', 'count' => $noContact, 'label' => 'students missing email and phone', 'severity' => 'warning', 'module' => 'students'];
+    }
+    return $items;
 }
 
 function students_list(string $q, int $limit, int $offset): array
