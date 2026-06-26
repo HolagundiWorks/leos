@@ -1,16 +1,22 @@
-# HCW-SMS DB connection config written by the installer — contains credentials.
-# Keep it out of version control; the installer regenerates it.
+# Legacy PHP installer DB config (contains credentials) — never track.
 /Data.php
 
 # HCW-SMS React/Mantine UI — deps and build artifacts (run `npm run build`).
 /frontend/node_modules/
 /frontend/dist/
-/assets/hcw-ui/
+
+# Rust build output (standalone server + Tauri) and Tauri codegen.
+/server/target/
+/src-tauri/target/
+/src-tauri/gen/
 
 # Local SQLite DB + portable school files created by the Rust server.
 *.sqlite
 *.sqlite-*
 *.schoolpkg
+
+# Tooling / local
+/.claude/
 
 # OS / editor noise
 Thumbs.db
