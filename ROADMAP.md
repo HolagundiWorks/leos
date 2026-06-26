@@ -20,12 +20,12 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
   Ctrl-K command palette, Alt-1…9, Lucide icons, refreshed palette
 - ✅ Students & Staff list screens
 
-## Phase 1 — Finish the prototype (guide §19) 🟡
+## Phase 1 — Finish the prototype (guide §19) ✅
 
 - ✅ **Student profile** — `GET /api/v1/students/{id}`; tabbed profile
   (Profile · Attendance · Fees · Academics · Documents) with top-right alert chips
-- ⬜ **Selectable tables** — row selection refines the bottom ribbon (Edit · View ·
-  Collect Fee · Print ID · Message Parent)
+- ✅ **Selectable rows** — selecting a student refines the bottom ribbon
+  (View profile · Edit · Print ID · Message Parent)
 - ✅ **Active work-queue dashboard** — passive stat cards replaced with a "Today"
   needs-attention queue (`dashboard/today`: not-enrolled, no grades/courses)
 - ⬜ Wire ribbon primary actions (Add/Edit student flows; stub the rest)
@@ -57,4 +57,4 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 ---
 
 ### Current focus
-Phase 1 → selectable-table → ribbon refinement, then the work-queue dashboard.
+Phase 1 complete. Next: Phase 2 — Attendance (mark/list + dashboard absentees feed).

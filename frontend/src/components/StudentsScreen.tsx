@@ -14,6 +14,7 @@ import {
 import { Search } from 'lucide-react';
 import type { Student } from '../api/client';
 import { useStudents } from '../hooks/useStudents';
+import { useSelection } from '../stores/selection';
 import { initials } from '../types';
 import { accentColors, type AccentColor } from '../theme';
 
@@ -21,10 +22,25 @@ function colorFor(id: number): AccentColor {
   return accentColors[id % accentColors.length];
 }
 
-function StudentRow({ s, onOpen }: { s: Student; onOpen: (id: number) => void }) {
+function StudentRow({
+  s,
+  selected,
+  onSelect,
+}: {
+  s: Student;
+  selected: boolean;
+  onSelect: (id: number, name: string) => void;
+}) {
   const name = `${s.first_name} ${s.last_name}`;
   return (
-    <Card onClick={() => onOpen(s.id)} style={{ cursor: 'pointer' }}>
+    <Card
+      onClick={() => onSelect(s.id, name)}
+      style={{
+        cursor: 'pointer',
+        borderColor: selected ? 'var(--mantine-color-brand-4)' : undefined,
+        background: selected ? 'var(--mantine-color-brand-0)' : undefined,
+      }}
+    >
       <Group justify="space-between" wrap="nowrap">
         <Group wrap="nowrap" gap="md" style={{ minWidth: 0 }}>
           <Avatar radius="xl" color={colorFor(s.id)} variant="light">
@@ -54,13 +70,11 @@ function StudentRow({ s, onOpen }: { s: Student; onOpen: (id: number) => void })
   );
 }
 
-export function StudentsScreen({
-  onOpenStudent,
-}: {
-  onOpenStudent: (id: number) => void;
-}) {
+export function StudentsScreen() {
   const [q, setQ] = useState('');
   const { data, isLoading } = useStudents(q);
+  const selected = useSelection((s) => s.student);
+  const selectStudent = useSelection((s) => s.selectStudent);
 
   return (
     <Container size="xl" px={0}>
@@ -68,7 +82,9 @@ export function StudentsScreen({
         <Group justify="space-between" align="flex-end" wrap="nowrap">
           <div>
             <Title order={2}>Students</Title>
-            <Text c="dimmed">{data ? `${data.total} enrolled` : 'Loading…'}</Text>
+            <Text c="dimmed">
+              {data ? `${data.total} enrolled · select a row for actions` : 'Loading…'}
+            </Text>
           </div>
           <TextInput
             w={260}
@@ -86,7 +102,12 @@ export function StudentsScreen({
             ))
           ) : data && data.students.length > 0 ? (
             data.students.map((s) => (
-              <StudentRow key={s.id} s={s} onOpen={onOpenStudent} />
+              <StudentRow
+                key={s.id}
+                s={s}
+                selected={selected?.id === s.id}
+                onSelect={selectStudent}
+              />
             ))
           ) : (
             <Card>

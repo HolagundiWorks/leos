@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SessionUser } from './types';
 import { useAuth } from './stores/auth';
+import { useSelection } from './stores/selection';
 import { LoginPage } from './components/LoginPage';
 import { CockpitShell } from './components/cockpit/CockpitShell';
 import { DashboardScreen } from './components/DashboardPage';
@@ -28,6 +29,7 @@ export function App() {
 
   const navigate = (key: string) => {
     setStudentId(null);
+    useSelection.getState().clear();
     setActive(key);
   };
 
@@ -39,7 +41,7 @@ export function App() {
       studentId != null ? (
         <StudentProfileScreen id={studentId} onBack={() => setStudentId(null)} />
       ) : (
-        <StudentsScreen onOpenStudent={setStudentId} />
+        <StudentsScreen />
       );
   } else if (active === 'staff') {
     screen = <StaffScreen />;
@@ -48,7 +50,12 @@ export function App() {
   }
 
   return (
-    <CockpitShell user={sessionUser} active={active} onNavigate={navigate}>
+    <CockpitShell
+      user={sessionUser}
+      active={active}
+      onNavigate={navigate}
+      onViewStudent={setStudentId}
+    >
       {screen}
     </CockpitShell>
   );

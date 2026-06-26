@@ -11,6 +11,7 @@ interface CockpitShellProps {
   user: SessionUser;
   active: string;
   onNavigate: (key: string) => void;
+  onViewStudent?: (id: number) => void;
   children: ReactNode;
 }
 
@@ -18,7 +19,13 @@ interface CockpitShellProps {
  * School-ops cockpit: thin utility strip (top), 48px latent icon rail (left),
  * workspace (center), bottom context ribbon, Ctrl-K palette. No wide sidebar.
  */
-export function CockpitShell({ user, active, onNavigate, children }: CockpitShellProps) {
+export function CockpitShell({
+  user,
+  active,
+  onNavigate,
+  onViewStudent,
+  children,
+}: CockpitShellProps) {
   // Alt+1..9 jump to modules.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -51,7 +58,7 @@ export function CockpitShell({ user, active, onNavigate, children }: CockpitShel
         </AppShell.Navbar>
         <AppShell.Main bg="var(--mantine-color-gray-0)">{children}</AppShell.Main>
         <AppShell.Footer>
-          <ContextRibbon active={active} />
+          <ContextRibbon active={active} onViewStudent={onViewStudent} />
         </AppShell.Footer>
       </AppShell>
     </>
