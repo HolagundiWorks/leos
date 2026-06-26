@@ -3,7 +3,7 @@ import { AppShell } from '@mantine/core';
 import type { SessionUser } from '../../types';
 import { modules } from '../../modules';
 import { UtilityStrip } from './UtilityStrip';
-import { IconRail } from './IconRail';
+import { TopRibbon } from './TopRibbon';
 import { ContextRibbon } from './ContextRibbon';
 import { CommandPalette } from './CommandPalette';
 import { BrandWatermark } from '../brand/BrandWatermark';
@@ -17,8 +17,8 @@ interface CockpitShellProps {
 }
 
 /**
- * School-ops cockpit: thin utility strip (top), 48px latent icon rail (left),
- * workspace (center), bottom context ribbon, Ctrl-K palette. No wide sidebar.
+ * School-ops cockpit: utility strip (school brand) + AutoCAD-style top ribbon
+ * for module navigation, workspace, and a bottom context ribbon. No side rail.
  */
 export function CockpitShell({
   user,
@@ -45,18 +45,23 @@ export function CockpitShell({
   return (
     <>
       <CommandPalette onNavigate={onNavigate} />
-      <AppShell
-        header={{ height: 44 }}
-        navbar={{ width: 56, breakpoint: 'xs', collapsed: { mobile: false } }}
-        footer={{ height: 64 }}
-        padding="md"
-      >
+      <AppShell header={{ height: 132 }} footer={{ height: 64 }} padding="md">
         <AppShell.Header>
-          <UtilityStrip user={user} />
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div
+              style={{
+                height: 44,
+                flexShrink: 0,
+                borderBottom: '1px solid var(--mantine-color-gray-2)',
+              }}
+            >
+              <UtilityStrip user={user} />
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <TopRibbon active={active} onSelect={onNavigate} />
+            </div>
+          </div>
         </AppShell.Header>
-        <AppShell.Navbar p={4}>
-          <IconRail active={active} onSelect={onNavigate} />
-        </AppShell.Navbar>
         <AppShell.Main bg="var(--mantine-color-gray-0)">{children}</AppShell.Main>
         <AppShell.Footer>
           <ContextRibbon active={active} onViewStudent={onViewStudent} />

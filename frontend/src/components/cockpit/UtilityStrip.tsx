@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   ActionIcon,
   Avatar,
@@ -15,23 +16,23 @@ import { Bell, LogOut, School, Search, UserCircle, Wifi } from 'lucide-react';
 import { roleLabel } from '../../roles';
 import { initials, type SessionUser } from '../../types';
 import { useAuth } from '../../stores/auth';
+import { useSchool } from '../../hooks/useSchool';
 
-const ACADEMIC_YEAR = '2026–27';
+const FALLBACK_AY = '2026–27';
 
 export function UtilityStrip({ user }: { user: SessionUser }) {
   const signOut = useAuth((s) => s.signOut);
+  const { data: school } = useSchool();
+  const schoolName = school?.name ?? 'School';
+  const academicYear = school?.academic_year ?? FALLBACK_AY;
 
   return (
     <Group h="100%" px="sm" justify="space-between" wrap="nowrap" gap="sm">
-      <Group gap="xs" wrap="nowrap">
-        <ThemeIcon size={26} radius="md" variant="light" color="brand">
-          <School size={16} strokeWidth={2} />
-        </ThemeIcon>
-        <Text fw={600} size="sm" lh={1}>
-          HCW-SMS
-        </Text>
-        <Text size="xs" c="dimmed" visibleFrom="sm">
-          School Of Architecture
+      {/* School brand — logo + school name (no product/SMS branding). */}
+      <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+        <SchoolMark />
+        <Text fw={700} size="sm" lh={1.15} truncate maw={260}>
+          {schoolName}
         </Text>
       </Group>
 
@@ -63,7 +64,7 @@ export function UtilityStrip({ user }: { user: SessionUser }) {
 
       <Group gap="xs" wrap="nowrap">
         <Badge variant="light" color="gray" radius="sm" visibleFrom="sm">
-          AY {ACADEMIC_YEAR}
+          AY {academicYear}
         </Badge>
         <LanStatus />
         <Indicator color="peach" size={7} offset={4}>
@@ -100,6 +101,26 @@ export function UtilityStrip({ user }: { user: SessionUser }) {
         </Menu>
       </Group>
     </Group>
+  );
+}
+
+// School logo — the real HCW emblem from public/, falling back to a school icon.
+function SchoolMark() {
+  const [stage, setStage] = useState<'svg' | 'png' | 'icon'>('svg');
+  if (stage === 'icon') {
+    return (
+      <ThemeIcon size={28} radius="md" variant="light" color="brand">
+        <School size={17} strokeWidth={2} />
+      </ThemeIcon>
+    );
+  }
+  return (
+    <img
+      src={stage === 'svg' ? '/hcw-logo.svg' : '/hcw-logo.png'}
+      alt=""
+      style={{ display: 'block', width: 'auto', height: 28, maxHeight: 28 }}
+      onError={() => setStage((s) => (s === 'svg' ? 'png' : 'icon'))}
+    />
   );
 }
 

@@ -71,7 +71,7 @@ builds.) Login is now **`admin` / `admin123`**.
 
 - **Have:** Dashboard · Students · Staff · Attendance · Fees · Exams · Library · Transport · Settings (most are placeholders).
 - **Add per spec:** Teachers · Courses · Subjects · Classrooms · **Timetable** · Substitution · Reports · Import/Export · Backup · LAN.
-- The cockpit shell (utility strip · icon rail · bottom context ribbon · Ctrl-K) ✅ already matches the spec's "modern interface" intent; timetable will need the spec's 3-panel layout (left: subjects/teachers/rooms · center: grid · right: conflicts/load).
+- The cockpit shell (utility strip with **school brand** · **AutoCAD-style top ribbon** of grouped medium icon+label buttons · bottom context ribbon · Ctrl-K) ✅ already matches the spec's "modern interface" intent; timetable will need the spec's 3-panel layout (left: subjects/teachers/rooms · center: grid · right: conflicts/load). (The left icon rail was replaced by the top ribbon; header shows school name/logo via `/school`, no product branding.)
 
 ## Implementation phases (spec §31) vs progress
 

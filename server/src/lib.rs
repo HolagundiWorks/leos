@@ -120,6 +120,9 @@ fn dispatch(
     if method == &Method::Get && path == "/classrooms" {
         return with_auth(state, token, |_| classrooms_list(state));
     }
+    if method == &Method::Get && path == "/school" {
+        return with_auth(state, token, |_| school_get(state));
+    }
     if method == &Method::Get && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_get(state));
     }
@@ -685,6 +688,19 @@ fn classrooms_list(state: &AppState) -> (u16, Value) {
     match res {
         Ok(()) => (200, json!({"classrooms": list, "total": list.len()})),
         Err(_) => (500, json!({"error": "query failed"})),
+    }
+}
+
+fn school_get(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let row = conn.query_row(
+        "SELECT name, academic_year FROM schools ORDER BY id LIMIT 1",
+        [],
+        |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)),
+    );
+    match row {
+        Ok((name, ay)) => (200, json!({"school": {"name": name, "academic_year": ay}})),
+        Err(_) => (200, json!({"school": Value::Null})),
     }
 }
 

@@ -181,3 +181,16 @@ export const modules: ModuleDef[] = [
 export const moduleByKey: Record<string, ModuleDef> = Object.fromEntries(
   modules.map((m) => [m.key, m]),
 );
+
+// AutoCAD-style ribbon: modules grouped into labelled panels along the top.
+export interface ModuleGroup {
+  label: string;
+  keys: string[];
+}
+export const moduleGroups: ModuleGroup[] = [
+  { label: 'Overview', keys: ['dashboard'] },
+  { label: 'People', keys: ['students', 'staff'] },
+  { label: 'Academics', keys: ['courses', 'subjects', 'classrooms', 'floorplan'] },
+  { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport'] },
+  { label: 'System', keys: ['settings'] },
+];

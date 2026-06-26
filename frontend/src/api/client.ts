@@ -201,6 +201,15 @@ export function fetchClassrooms(token: string) {
   return req<ClassroomsResponse>('/classrooms', { token });
 }
 
+export interface School {
+  name: string | null;
+  academic_year: string | null;
+}
+export async function fetchSchool(token: string): Promise<School | null> {
+  const res = await req<{ school: School | null }>('/school', { token });
+  return res.school;
+}
+
 export interface RoomShape {
   id: string;
   type: string;
