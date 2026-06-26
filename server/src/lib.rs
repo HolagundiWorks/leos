@@ -262,6 +262,67 @@ fn dispatch(
     if method == &Method::Post && path == "/substitutions/resolve" {
         return with_auth(state, token, |_| substitution_resolve(state, body));
     }
+    // Event Management OS (P7)
+    if method == &Method::Get && path == "/announcements" {
+        return with_auth(state, token, |_| announcements_list(state, url));
+    }
+    if method == &Method::Post && path == "/announcements" {
+        return with_auth(state, token, |u| announcement_create(state, body, u));
+    }
+    if method == &Method::Post && path.starts_with("/announcements/") && path.ends_with("/publish") {
+        let id_str = &path["/announcements/".len()..path.len() - "/publish".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| announcement_publish(state, id));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/announcements/") && path.ends_with("/delete") {
+        let id_str = &path["/announcements/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| announcement_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/meetings" {
+        return with_auth(state, token, |_| meetings_list(state, url));
+    }
+    if method == &Method::Post && path == "/meetings" {
+        return with_auth(state, token, |u| meeting_create(state, body, u));
+    }
+    if method == &Method::Post && path.starts_with("/meetings/") && path.ends_with("/update") {
+        let id_str = &path["/meetings/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| meeting_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/meetings/") && path.ends_with("/delete") {
+        let id_str = &path["/meetings/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| meeting_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/tasks" {
+        return with_auth(state, token, |_| tasks_list(state, url));
+    }
+    if method == &Method::Post && path == "/tasks" {
+        return with_auth(state, token, |u| task_create(state, body, u));
+    }
+    if method == &Method::Post && path.starts_with("/tasks/") && path.ends_with("/update") {
+        let id_str = &path["/tasks/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| task_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/tasks/") && path.ends_with("/complete") {
+        let id_str = &path["/tasks/".len()..path.len() - "/complete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| task_complete(state, id));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/tasks/") && path.ends_with("/delete") {
+        let id_str = &path["/tasks/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| task_delete(state, id));
+        }
+    }
     // Fee OS (P6)
     if method == &Method::Get && path == "/fee-heads" {
         return with_auth(state, token, |_| fee_heads_list(state));
@@ -850,6 +911,10 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS exam_marks(id INTEGER PRIMARY KEY AUTOINCREMENT, exam_id INTEGER NOT NULL, student_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, marks_obtained REAL, max_marks REAL DEFAULT 100, grade TEXT, remarks TEXT, UNIQUE(exam_id, student_id, subject_id));
          CREATE TABLE IF NOT EXISTS salary_structures(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL UNIQUE, basic REAL DEFAULT 0, hra REAL DEFAULT 0, da REAL DEFAULT 0, ta REAL DEFAULT 0, other_allowances REAL DEFAULT 0, pf_deduction REAL DEFAULT 0, pt_deduction REAL DEFAULT 0, other_deductions REAL DEFAULT 0, effective_from TEXT, updated_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS payslips(id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL, month TEXT NOT NULL, basic REAL, hra REAL, da REAL, ta REAL, other_allowances REAL, pf_deduction REAL, pt_deduction REAL, other_deductions REAL, gross REAL, net REAL, working_days INTEGER, paid_days INTEGER, generated_at TEXT DEFAULT (datetime('now')), UNIQUE(staff_id, month));
+         CREATE TABLE IF NOT EXISTS announcements(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT, audience TEXT DEFAULT 'internal', is_draft INTEGER DEFAULT 0, published_at TEXT, created_by INTEGER, created_at TEXT DEFAULT (datetime('now')));
+         CREATE TABLE IF NOT EXISTS meetings(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, meeting_type TEXT DEFAULT 'staff', date TEXT NOT NULL, start_time TEXT, end_time TEXT, venue TEXT, agenda TEXT, minutes TEXT, status TEXT DEFAULT 'scheduled', created_by INTEGER, created_at TEXT DEFAULT (datetime('now')));
+         CREATE TABLE IF NOT EXISTS meeting_attendees(id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id INTEGER NOT NULL, staff_id INTEGER, UNIQUE(meeting_id, staff_id));
+         CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT, assigned_to INTEGER, department_id INTEGER, due_date TEXT, priority TEXT DEFAULT 'normal', status TEXT DEFAULT 'pending', created_by INTEGER, completed_at TEXT, created_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS fee_heads(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, is_optional INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS fee_structures(id INTEGER PRIMARY KEY AUTOINCREMENT, academic_year_id INTEGER, class_id INTEGER, fee_head_id INTEGER NOT NULL, amount REAL NOT NULL, due_date TEXT, UNIQUE(academic_year_id, class_id, fee_head_id));
          CREATE TABLE IF NOT EXISTS fee_payments(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, fee_head_id INTEGER NOT NULL, academic_year_id INTEGER, amount_paid REAL NOT NULL, payment_date TEXT DEFAULT (date('now')), payment_mode TEXT DEFAULT 'cash', reference TEXT, receipt_no TEXT, collected_by INTEGER, notes TEXT, created_at TEXT DEFAULT (datetime('now')));
@@ -1163,6 +1228,244 @@ fn substitution_resolve(state: &AppState, body: &str) -> (u16, Value) {
         Ok(_) => (404, json!({"error": "substitution not found"})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Event Management OS (P7) ----
+
+fn announcements_list(state: &AppState, url: &str) -> (u16, Value) {
+    let audience = q_param(url, "audience");
+    let draft_only = q_param(url, "draft").map(|v| v == "1").unwrap_or(false);
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, title, body, audience, is_draft, published_at, created_by, created_at FROM announcements
+         WHERE (?1 IS NULL OR audience=?1) AND (?2=0 OR is_draft=1)
+         ORDER BY created_at DESC LIMIT 100",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![audience, draft_only as i64], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "title": r.get::<_, String>(1)?,
+            "body": r.get::<_, Option<String>>(2)?,
+            "audience": r.get::<_, Option<String>>(3)?,
+            "is_draft": r.get::<_, i64>(4)? == 1,
+            "published_at": r.get::<_, Option<String>>(5)?,
+            "created_by": r.get::<_, Option<i64>>(6)?,
+            "created_at": r.get::<_, String>(7)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"announcements": rows, "total": total}))
+}
+
+fn announcement_create(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let title = match v["title"].as_str() { Some(t) if !t.is_empty() => t.to_string(), _ => return (422, json!({"error": "title required"})) };
+    let body_text = v["body"].as_str().map(|s| s.to_string());
+    let audience = v["audience"].as_str().unwrap_or("internal").to_string();
+    let is_draft = v["is_draft"].as_bool().unwrap_or(true) as i64;
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO announcements(title, body, audience, is_draft, published_at, created_by) VALUES(?1,?2,?3,?4,CASE WHEN ?5=0 THEN datetime('now') ELSE NULL END,?6)",
+        params![title, body_text, audience, is_draft, is_draft, uid],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn announcement_publish(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("UPDATE announcements SET is_draft=0, published_at=datetime('now') WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn announcement_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM announcements WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn meetings_list(state: &AppState, url: &str) -> (u16, Value) {
+    let status = q_param(url, "status");
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, title, meeting_type, date, start_time, end_time, venue, agenda, minutes, status, created_by, created_at
+         FROM meetings WHERE (?1 IS NULL OR status=?1) ORDER BY date DESC, start_time LIMIT 200",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![status], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "title": r.get::<_, String>(1)?,
+            "meeting_type": r.get::<_, Option<String>>(2)?,
+            "date": r.get::<_, String>(3)?,
+            "start_time": r.get::<_, Option<String>>(4)?,
+            "end_time": r.get::<_, Option<String>>(5)?,
+            "venue": r.get::<_, Option<String>>(6)?,
+            "agenda": r.get::<_, Option<String>>(7)?,
+            "minutes": r.get::<_, Option<String>>(8)?,
+            "status": r.get::<_, Option<String>>(9)?,
+            "created_by": r.get::<_, Option<i64>>(10)?,
+            "created_at": r.get::<_, String>(11)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"meetings": rows, "total": total}))
+}
+
+fn meeting_create(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let title = match v["title"].as_str() { Some(t) if !t.is_empty() => t.to_string(), _ => return (422, json!({"error": "title required"})) };
+    let date = match v["date"].as_str() { Some(d) if !d.is_empty() => d.to_string(), _ => return (422, json!({"error": "date required"})) };
+    let mtype = v["meeting_type"].as_str().unwrap_or("staff").to_string();
+    let start = v["start_time"].as_str().map(|s| s.to_string());
+    let end = v["end_time"].as_str().map(|s| s.to_string());
+    let venue = v["venue"].as_str().map(|s| s.to_string());
+    let agenda = v["agenda"].as_str().map(|s| s.to_string());
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO meetings(title, meeting_type, date, start_time, end_time, venue, agenda, created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+        params![title, mtype, date, start, end, venue, agenda, uid],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn meeting_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "UPDATE meetings SET title=COALESCE(?1,title), date=COALESCE(?2,date), start_time=?3, end_time=?4,
+         venue=?5, agenda=?6, minutes=?7, status=COALESCE(?8,status) WHERE id=?9",
+        params![
+            v["title"].as_str().filter(|s| !s.is_empty()),
+            v["date"].as_str().filter(|s| !s.is_empty()),
+            v["start_time"].as_str().map(|s| s.to_string()),
+            v["end_time"].as_str().map(|s| s.to_string()),
+            v["venue"].as_str().map(|s| s.to_string()),
+            v["agenda"].as_str().map(|s| s.to_string()),
+            v["minutes"].as_str().map(|s| s.to_string()),
+            v["status"].as_str().filter(|s| !s.is_empty()),
+            id
+        ],
+    );
+    (200, json!({"ok": true}))
+}
+
+fn meeting_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM meeting_attendees WHERE meeting_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM meetings WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn tasks_list(state: &AppState, url: &str) -> (u16, Value) {
+    let status = q_param(url, "status");
+    let assigned_to: Option<i64> = q_param(url, "assigned_to").and_then(|v| v.parse().ok());
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT t.id, t.title, t.description, t.assigned_to,
+                st.first_name, st.last_name,
+                t.department_id, d.name as dept_name,
+                t.due_date, t.priority, t.status, t.created_by, t.completed_at, t.created_at
+         FROM tasks t
+         LEFT JOIN staff st ON st.id = t.assigned_to
+         LEFT JOIN departments d ON d.id = t.department_id
+         WHERE (?1 IS NULL OR t.status=?1) AND (?2 IS NULL OR t.assigned_to=?2)
+         ORDER BY t.due_date, t.priority DESC, t.created_at DESC LIMIT 200",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![status, assigned_to], |r| {
+        let fn_: Option<String> = r.get(4)?;
+        let ln: Option<String> = r.get(5)?;
+        let assignee = match (fn_.as_deref(), ln.as_deref()) {
+            (Some(f), Some(l)) => Some(format!("{f} {l}")),
+            (Some(f), None) => Some(f.to_string()),
+            (None, Some(l)) => Some(l.to_string()),
+            _ => None,
+        };
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "title": r.get::<_, String>(1)?,
+            "description": r.get::<_, Option<String>>(2)?,
+            "assigned_to": r.get::<_, Option<i64>>(3)?,
+            "assignee_name": assignee,
+            "department_id": r.get::<_, Option<i64>>(6)?,
+            "department_name": r.get::<_, Option<String>>(7)?,
+            "due_date": r.get::<_, Option<String>>(8)?,
+            "priority": r.get::<_, Option<String>>(9)?,
+            "status": r.get::<_, Option<String>>(10)?,
+            "created_by": r.get::<_, Option<i64>>(11)?,
+            "completed_at": r.get::<_, Option<String>>(12)?,
+            "created_at": r.get::<_, String>(13)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"tasks": rows, "total": total}))
+}
+
+fn task_create(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let title = match v["title"].as_str() { Some(t) if !t.is_empty() => t.to_string(), _ => return (422, json!({"error": "title required"})) };
+    let desc = v["description"].as_str().map(|s| s.to_string());
+    let assigned_to = v["assigned_to"].as_i64();
+    let dept_id = v["department_id"].as_i64();
+    let due = v["due_date"].as_str().map(|s| s.to_string());
+    let priority = v["priority"].as_str().unwrap_or("normal").to_string();
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO tasks(title, description, assigned_to, department_id, due_date, priority, created_by) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        params![title, desc, assigned_to, dept_id, due, priority, uid],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn task_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "UPDATE tasks SET title=COALESCE(?1,title), description=?2, due_date=?3, priority=COALESCE(?4,priority), status=COALESCE(?5,status) WHERE id=?6",
+        params![
+            v["title"].as_str().filter(|s| !s.is_empty()),
+            v["description"].as_str().map(|s| s.to_string()),
+            v["due_date"].as_str().map(|s| s.to_string()),
+            v["priority"].as_str().filter(|s| !s.is_empty()),
+            v["status"].as_str().filter(|s| !s.is_empty()),
+            id
+        ],
+    );
+    (200, json!({"ok": true}))
+}
+
+fn task_complete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("UPDATE tasks SET status='completed', completed_at=datetime('now') WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn task_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM tasks WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
 }
 
 // ---- Fee OS (P6) ----

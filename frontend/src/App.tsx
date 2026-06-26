@@ -26,6 +26,7 @@ import { StaffOSScreen } from './components/StaffOSScreen';
 import { PayrollScreen } from './components/PayrollScreen';
 import { ExamScreen } from './components/ExamScreen';
 import { FeeScreen } from './components/FeeScreen';
+import { EventScreen } from './components/EventScreen';
 import { Placeholder } from './components/Placeholder';
 
 // Auth gate + cockpit shell. Active module drives the workspace + ribbon;
@@ -96,6 +97,8 @@ export function App() {
     screen = <ExamScreen />;
   } else if (active === 'fees') {
     screen = <FeeScreen />;
+  } else if (active === 'events') {
+    screen = <EventScreen />;
   } else if (active === 'floorplan') {
     screen = <FloorPlanScreen />;
   } else if (active === 'academic-year') {

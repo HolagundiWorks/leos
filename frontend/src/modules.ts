@@ -241,6 +241,16 @@ export const modules: ModuleDef[] = [
       { key: 'save', label: 'Save', icon: Save, shortcut: 'Ctrl S' },
     ],
   },
+  {
+    key: 'events',
+    label: 'Events',
+    icon: Bell,
+    actions: [
+      { key: 'announce', label: 'New Announcement', icon: Plus, shortcut: 'Ctrl N' },
+      { key: 'meeting', label: 'Schedule Meeting', icon: CalendarDays },
+      { key: 'task', label: 'Assign Task', icon: ClipboardList },
+    ],
+  },
   { key: 'transport', label: 'Transport', icon: Bus, actions: [] },
   {
     key: 'payroll',
@@ -277,6 +287,6 @@ export const moduleGroups: ModuleGroup[] = [
   { label: 'People', keys: ['students', 'staff', 'staff-os'] },
   { label: 'Academics', keys: ['classes', 'teacher-subjects', 'courses', 'subjects', 'classrooms', 'floorplan'] },
   { label: 'Schedule', keys: ['timetable', 'substitution', 'timings'] },
-  { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport', 'payroll'] },
+  { label: 'Operations', keys: ['attendance', 'fees', 'exams', 'library', 'transport', 'payroll', 'events'] },
   { label: 'System', keys: ['academic-year', 'settings'] },
 ];
