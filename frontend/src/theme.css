@@ -55,13 +55,10 @@ body {
   --carbon-gray-100: 22, 22, 22; /* #161616 */
 }
 
-/* AppShell chrome → frosted glass, more transparent (Carbon cool gray 10). */
-.mantine-AppShell-header,
-.mantine-AppShell-footer {
-  background: rgba(var(--carbon-cool-10), 0.42) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  backdrop-filter: blur(20px) saturate(140%);
-  border-color: rgba(255, 255, 255, 0.4) !important;
+/* Header → bold purple bar (Carbon Purple 70). */
+.mantine-AppShell-header {
+  background: var(--mantine-color-lavender-6) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
 }
 .mantine-AppShell-main {
   background: transparent !important;

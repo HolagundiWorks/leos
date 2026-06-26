@@ -20,6 +20,8 @@ import { useSchool } from '../../hooks/useSchool';
 import { institutionTypeLabel } from '../../lib/institution';
 
 const FALLBACK_AY = '2026–27';
+// Translucent white chip for badges on the purple bar.
+const chip = { root: { background: 'rgba(255,255,255,0.18)' }, label: { color: '#fff' } };
 
 export function UtilityStrip({ user }: { user: SessionUser }) {
   const signOut = useAuth((s) => s.signOut);
@@ -29,10 +31,10 @@ export function UtilityStrip({ user }: { user: SessionUser }) {
 
   return (
     <Group h="100%" px="sm" justify="space-between" wrap="nowrap" gap="sm">
-      {/* School brand — logo + school name (no product/SMS branding). */}
+      {/* School brand — logo + school name. */}
       <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
         <SchoolMark />
-        <Text fw={700} size="sm" lh={1.15} truncate maw={260}>
+        <Text fw={700} size="sm" lh={1.15} c="white" truncate maw={260}>
           {schoolName}
         </Text>
       </Group>
@@ -45,35 +47,35 @@ export function UtilityStrip({ user }: { user: SessionUser }) {
           maxWidth: 460,
           height: 28,
           borderRadius: 'var(--mantine-radius-md)',
-          border: '1px solid var(--mantine-color-gray-2)',
-          background: 'var(--mantine-color-gray-0)',
+          border: '1px solid rgba(255,255,255,0.25)',
+          background: 'rgba(255,255,255,0.12)',
           padding: '0 10px',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          color: 'var(--mantine-color-gray-5)',
+          color: 'rgba(255,255,255,0.85)',
         }}
       >
         <Search size={15} strokeWidth={1.9} />
-        <Text size="xs" c="dimmed">
+        <Text size="xs" style={{ color: 'rgba(255,255,255,0.8)' }}>
           Search students, staff, actions…
         </Text>
-        <Badge ml="auto" size="xs" variant="default" radius="sm">
+        <Badge ml="auto" size="xs" radius="sm" styles={chip}>
           Ctrl K
         </Badge>
       </UnstyledButton>
 
       <Group gap="xs" wrap="nowrap">
-        <Badge variant="light" color="brand" radius="sm" visibleFrom="md">
+        <Badge size="sm" radius="sm" styles={chip} visibleFrom="md">
           {institutionTypeLabel(school?.type)}
         </Badge>
-        <Badge variant="light" color="gray" radius="sm" visibleFrom="sm">
+        <Badge size="sm" radius="sm" styles={chip} visibleFrom="sm">
           AY {academicYear}
         </Badge>
         <LanStatus />
         <Indicator color="peach" size={7} offset={4}>
           <ActionIcon variant="subtle" color="gray" aria-label="Alerts">
-            <Bell size={18} strokeWidth={1.9} />
+            <Bell size={18} strokeWidth={1.9} color="rgba(255,255,255,0.85)" />
           </ActionIcon>
         </Indicator>
 
@@ -81,14 +83,21 @@ export function UtilityStrip({ user }: { user: SessionUser }) {
           <Menu.Target>
             <UnstyledButton>
               <Group gap={8} wrap="nowrap">
-                <Avatar size={28} radius="xl" color="brand" variant="light">
+                <Avatar
+                  size={28}
+                  radius="xl"
+                  styles={{
+                    root: { background: '#fff' },
+                    placeholder: { color: 'var(--mantine-color-lavender-7)', fontWeight: 600 },
+                  }}
+                >
                   {initials(user.name)}
                 </Avatar>
                 <Box style={{ lineHeight: 1.1 }} visibleFrom="sm">
-                  <Text size="xs" fw={600}>
+                  <Text size="xs" fw={600} c="white">
                     {user.name}
                   </Text>
-                  <Text fz={10} c="dimmed">
+                  <Text fz={10} style={{ color: 'rgba(255,255,255,0.7)' }}>
                     {roleLabel[user.role]}
                   </Text>
                 </Box>
@@ -113,7 +122,7 @@ function SchoolMark() {
   const [stage, setStage] = useState<'svg' | 'png' | 'icon'>('svg');
   if (stage === 'icon') {
     return (
-      <ThemeIcon size={28} radius="md" variant="light" color="brand">
+      <ThemeIcon size={28} radius="md" variant="white" color="lavender">
         <School size={17} strokeWidth={2} />
       </ThemeIcon>
     );
@@ -131,8 +140,8 @@ function SchoolMark() {
 /** LAN/server status indicator. */
 function LanStatus() {
   return (
-    <Group gap={4} wrap="nowrap" visibleFrom="md" c="dimmed">
-      <Wifi size={15} strokeWidth={1.9} color="var(--mantine-color-mint-6)" />
+    <Group gap={4} wrap="nowrap" visibleFrom="md" style={{ color: 'rgba(255,255,255,0.8)' }}>
+      <Wifi size={15} strokeWidth={1.9} color="rgba(255,255,255,0.85)" />
       <Text fz={10}>LAN</Text>
     </Group>
   );

@@ -4,7 +4,6 @@ import type { SessionUser } from '../../types';
 import { modules } from '../../modules';
 import { UtilityStrip } from './UtilityStrip';
 import { TopRibbon } from './TopRibbon';
-import { ContextRibbon } from './ContextRibbon';
 import { CommandPalette } from './CommandPalette';
 import { BrandWatermark } from '../brand/BrandWatermark';
 
@@ -17,16 +16,10 @@ interface CockpitShellProps {
 }
 
 /**
- * School-ops cockpit: utility strip (school brand) + AutoCAD-style top ribbon
- * for module navigation, workspace, and a bottom context ribbon. No side rail.
+ * School-ops cockpit: bold purple header (utility strip + AutoCAD-style top
+ * ribbon) over a full-height workspace. No footer.
  */
-export function CockpitShell({
-  user,
-  active,
-  onNavigate,
-  onViewStudent,
-  children,
-}: CockpitShellProps) {
+export function CockpitShell({ user, active, onNavigate, children }: CockpitShellProps) {
   // Alt+1..9 jump to modules.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,14 +38,14 @@ export function CockpitShell({
   return (
     <>
       <CommandPalette onNavigate={onNavigate} />
-      <AppShell header={{ height: 132 }} footer={{ height: 64 }} padding="md">
+      <AppShell header={{ height: 132 }} padding="md">
         <AppShell.Header>
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div
               style={{
                 height: 44,
                 flexShrink: 0,
-                borderBottom: '1px solid var(--mantine-color-gray-2)',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.18)',
               }}
             >
               <UtilityStrip user={user} />
@@ -63,9 +56,6 @@ export function CockpitShell({
           </div>
         </AppShell.Header>
         <AppShell.Main>{children}</AppShell.Main>
-        <AppShell.Footer>
-          <ContextRibbon active={active} onViewStudent={onViewStudent} />
-        </AppShell.Footer>
       </AppShell>
       <BrandWatermark />
     </>
