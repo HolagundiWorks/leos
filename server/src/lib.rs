@@ -262,6 +262,28 @@ fn dispatch(
     if method == &Method::Post && path == "/substitutions/resolve" {
         return with_auth(state, token, |_| substitution_resolve(state, body));
     }
+    // Attendance OS (P3)
+    if method == &Method::Get && path == "/section-students" {
+        return with_auth(state, token, |_| section_students_list(state, url));
+    }
+    if method == &Method::Post && path == "/section-students" {
+        return with_auth(state, token, |_| section_students_enroll(state, body));
+    }
+    if method == &Method::Post && path == "/section-students/remove" {
+        return with_auth(state, token, |_| section_students_remove(state, body));
+    }
+    if method == &Method::Get && path == "/attendance" {
+        return with_auth(state, token, |_| attendance_get(state, url));
+    }
+    if method == &Method::Post && path == "/attendance/mark" {
+        return with_auth(state, token, |uid| attendance_mark(state, uid, body));
+    }
+    if method == &Method::Get && path == "/attendance/summary" {
+        return with_auth(state, token, |_| attendance_summary(state, url));
+    }
+    if method == &Method::Get && path == "/attendance/alerts" {
+        return with_auth(state, token, |_| attendance_alerts(state));
+    }
     if method == &Method::Post && path == "/leosdb/save" {
         return with_auth(state, token, |_| leosdb_save(body));
     }
@@ -699,7 +721,9 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
          CREATE TABLE IF NOT EXISTS academic_years(id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL, start_date TEXT, end_date TEXT, is_active INTEGER DEFAULT 0, is_closed INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS terms(id INTEGER PRIMARY KEY AUTOINCREMENT, year_id INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE, label TEXT NOT NULL, start_date TEXT, end_date TEXT, is_active INTEGER DEFAULT 0);
-         CREATE TABLE IF NOT EXISTS substitutions(id INTEGER PRIMARY KEY AUTOINCREMENT, original_entry_id INTEGER NOT NULL, original_staff_id INTEGER NOT NULL, substitute_staff_id INTEGER, date TEXT NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')), resolved_at TEXT, UNIQUE(original_entry_id, date));",
+         CREATE TABLE IF NOT EXISTS substitutions(id INTEGER PRIMARY KEY AUTOINCREMENT, original_entry_id INTEGER NOT NULL, original_staff_id INTEGER NOT NULL, substitute_staff_id INTEGER, date TEXT NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')), resolved_at TEXT, UNIQUE(original_entry_id, date));
+         CREATE TABLE IF NOT EXISTS section_students(id INTEGER PRIMARY KEY AUTOINCREMENT, section_id INTEGER NOT NULL, student_id INTEGER NOT NULL, enrolled_date TEXT, UNIQUE(section_id, student_id));
+         CREATE TABLE IF NOT EXISTS student_attendance(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, section_id INTEGER NOT NULL, date TEXT NOT NULL, period_id INTEGER NOT NULL, status TEXT DEFAULT 'present', marked_by INTEGER, note TEXT, marked_at TEXT DEFAULT (datetime('now')), UNIQUE(student_id, date, period_id));",
     )
     .expect("create schema");
 
@@ -1007,6 +1031,246 @@ fn substitution_resolve(state: &AppState, body: &str) -> (u16, Value) {
         Ok(_) => (404, json!({"error": "substitution not found"})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Attendance OS (P3) ----
+
+fn section_students_list(state: &AppState, url: &str) -> (u16, Value) {
+    let section_id: i64 = match q_param(url, "section_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "section_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT s.id, s.first_name, s.last_name, s.email, s.gender, ss.enrolled_date
+         FROM section_students ss
+         JOIN students s ON s.id = ss.student_id
+         WHERE ss.section_id = ?1
+         ORDER BY s.first_name, s.last_name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![section_id], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "first_name": r.get::<_, Option<String>>(1)?,
+            "last_name": r.get::<_, Option<String>>(2)?,
+            "email": r.get::<_, Option<String>>(3)?,
+            "gender": r.get::<_, Option<String>>(4)?,
+            "enrolled_date": r.get::<_, Option<String>>(5)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"students": rows, "total": total}))
+}
+
+fn section_students_enroll(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let section_id = match v["section_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "section_id required"})),
+    };
+    let student_id = match v["student_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "student_id required"})),
+    };
+    let date = v["enrolled_date"].as_str().map(|s| s.to_string());
+    let conn = state.conn.lock().unwrap();
+    let r = conn.execute(
+        "INSERT OR IGNORE INTO section_students(section_id, student_id, enrolled_date) VALUES(?1,?2,?3)",
+        params![section_id, student_id, date],
+    );
+    match r {
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn section_students_remove(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let section_id = v["section_id"].as_i64().unwrap_or(0);
+    let student_id = v["student_id"].as_i64().unwrap_or(0);
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "DELETE FROM section_students WHERE section_id=?1 AND student_id=?2",
+        params![section_id, student_id],
+    );
+    (200, json!({"ok": true}))
+}
+
+fn attendance_get(state: &AppState, url: &str) -> (u16, Value) {
+    let section_id: i64 = match q_param(url, "section_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "section_id required"})),
+    };
+    let date = match q_param(url, "date") {
+        Some(d) => d,
+        None => return (422, json!({"error": "date required"})),
+    };
+    let period_id: i64 = match q_param(url, "period_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "period_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT s.id, s.first_name, s.last_name,
+                COALESCE(sa.status, 'unmarked') AS status, sa.note
+         FROM section_students ss
+         JOIN students s ON s.id = ss.student_id
+         LEFT JOIN student_attendance sa
+           ON sa.student_id = ss.student_id AND sa.date = ?2 AND sa.period_id = ?3
+         WHERE ss.section_id = ?1
+         ORDER BY s.first_name, s.last_name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![section_id, date, period_id], |r| {
+        Ok(json!({
+            "student_id": r.get::<_, i64>(0)?,
+            "first_name": r.get::<_, Option<String>>(1)?,
+            "last_name": r.get::<_, Option<String>>(2)?,
+            "status": r.get::<_, String>(3)?,
+            "note": r.get::<_, Option<String>>(4)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    (200, json!({"students": rows, "section_id": section_id, "date": date, "period_id": period_id}))
+}
+
+fn attendance_mark(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let section_id = match v["section_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "section_id required"})),
+    };
+    let date = match v["date"].as_str() {
+        Some(d) if !d.is_empty() => d.to_string(),
+        _ => return (422, json!({"error": "date required"})),
+    };
+    let period_id = match v["period_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "period_id required"})),
+    };
+    let records = match v["records"].as_array() {
+        Some(r) => r.clone(),
+        None => return (422, json!({"error": "records required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut saved = 0i64;
+    for rec in &records {
+        let student_id = rec["student_id"].as_i64().unwrap_or(0);
+        let status = rec["status"].as_str().unwrap_or("present");
+        let note = rec["note"].as_str().map(|s| s.to_string());
+        let _ = conn.execute(
+            "INSERT INTO student_attendance(student_id, section_id, date, period_id, status, marked_by, note)
+             VALUES(?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(student_id, date, period_id) DO UPDATE SET
+               status=excluded.status, marked_by=excluded.marked_by, note=excluded.note,
+               marked_at=datetime('now')",
+            params![student_id, section_id, date, period_id, status, uid, note],
+        );
+        saved += 1;
+    }
+    (200, json!({"ok": true, "saved": saved}))
+}
+
+fn attendance_summary(state: &AppState, url: &str) -> (u16, Value) {
+    let section_id: i64 = match q_param(url, "section_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "section_id required"})),
+    };
+    let from = q_param(url, "from").unwrap_or_else(|| "1900-01-01".into());
+    let to = q_param(url, "to").unwrap_or_else(|| "2099-12-31".into());
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT ss.student_id, s.first_name, s.last_name,
+                COUNT(CASE WHEN sa.status='present' THEN 1 END) as present_days,
+                COUNT(CASE WHEN sa.status='absent'  THEN 1 END) as absent_days,
+                COUNT(CASE WHEN sa.status='late'    THEN 1 END) as late_days,
+                COUNT(CASE WHEN sa.status='excused' THEN 1 END) as excused_days,
+                COUNT(sa.id) as total_marked
+         FROM section_students ss
+         JOIN students s ON s.id = ss.student_id
+         LEFT JOIN student_attendance sa
+           ON sa.student_id = ss.student_id AND sa.section_id = ss.section_id
+           AND sa.date >= ?2 AND sa.date <= ?3
+         WHERE ss.section_id = ?1
+         GROUP BY ss.student_id, s.first_name, s.last_name
+         ORDER BY s.first_name, s.last_name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map(params![section_id, from, to], |r| {
+        let total: i64 = r.get::<_, Option<i64>>(7)?.unwrap_or(0);
+        let present: i64 = r.get::<_, Option<i64>>(3)?.unwrap_or(0);
+        let late: i64 = r.get::<_, Option<i64>>(5)?.unwrap_or(0);
+        let pct = if total > 0 { (present + late) as f64 / total as f64 * 100.0 } else { 0.0 };
+        Ok(json!({
+            "student_id": r.get::<_, i64>(0)?,
+            "first_name": r.get::<_, Option<String>>(1)?,
+            "last_name": r.get::<_, Option<String>>(2)?,
+            "present_days": present,
+            "absent_days": r.get::<_, Option<i64>>(4)?.unwrap_or(0),
+            "late_days": late,
+            "excused_days": r.get::<_, Option<i64>>(6)?.unwrap_or(0),
+            "total_marked": total,
+            "attendance_pct": (pct * 10.0).round() / 10.0,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    (200, json!({"summary": rows, "section_id": section_id, "from": from, "to": to}))
+}
+
+fn attendance_alerts(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT s.id, s.first_name, s.last_name, sec.id, sec.name, c.name,
+                COUNT(CASE WHEN sa.status='present' OR sa.status='late' THEN 1 END) as attended,
+                COUNT(sa.id) as total
+         FROM section_students ss
+         JOIN students s ON s.id = ss.student_id
+         JOIN sections sec ON sec.id = ss.section_id
+         JOIN classes c ON c.id = sec.class_id
+         LEFT JOIN student_attendance sa ON sa.student_id = ss.student_id AND sa.section_id = ss.section_id
+         GROUP BY s.id, ss.section_id
+         HAVING total > 5 AND CAST(attended AS REAL)/CAST(total AS REAL) < 0.75
+         ORDER BY CAST(attended AS REAL)/CAST(total AS REAL) ASC
+         LIMIT 50",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map([], |r| {
+        let attended: i64 = r.get::<_, Option<i64>>(6)?.unwrap_or(0);
+        let total: i64 = r.get::<_, Option<i64>>(7)?.unwrap_or(0);
+        let pct = if total > 0 { attended as f64 / total as f64 * 100.0 } else { 0.0 };
+        Ok(json!({
+            "student_id": r.get::<_, i64>(0)?,
+            "first_name": r.get::<_, Option<String>>(1)?,
+            "last_name": r.get::<_, Option<String>>(2)?,
+            "section_id": r.get::<_, i64>(3)?,
+            "section_name": r.get::<_, Option<String>>(4)?,
+            "class_name": r.get::<_, Option<String>>(5)?,
+            "attended": attended,
+            "total": total,
+            "attendance_pct": (pct * 10.0).round() / 10.0,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let total = rows.len();
+    (200, json!({"alerts": rows, "total": total}))
 }
 
 // ---- .leosdb portable archive (ZIP: manifest + school.sqlite + media/docs) ----

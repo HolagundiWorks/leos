@@ -20,6 +20,7 @@ import { FloorPlanScreen } from './components/FloorPlanScreen';
 import { InstitutionSettingsScreen } from './components/InstitutionSettingsScreen';
 import { AcademicYearScreen } from './components/AcademicYearScreen';
 import { SubstitutionScreen } from './components/SubstitutionScreen';
+import { AttendanceScreen } from './components/AttendanceScreen';
 import { Placeholder } from './components/Placeholder';
 
 // Auth gate + cockpit shell. Active module drives the workspace + ribbon;
@@ -78,6 +79,8 @@ export function App() {
     screen = <TimetableScreen />;
   } else if (active === 'substitution') {
     screen = <SubstitutionScreen />;
+  } else if (active === 'attendance') {
+    screen = <AttendanceScreen />;
   } else if (active === 'floorplan') {
     screen = <FloorPlanScreen />;
   } else if (active === 'academic-year') {
