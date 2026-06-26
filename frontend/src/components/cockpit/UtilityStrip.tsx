@@ -8,11 +8,10 @@ import {
   Indicator,
   Menu,
   Text,
-  ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
 import { spotlight } from '@mantine/spotlight';
-import { Bell, LogOut, School, Search, UserCircle, Wifi } from 'lucide-react';
+import { Bell, LogOut, Search, UserCircle, Wifi } from 'lucide-react';
 import { roleLabel } from '../../roles';
 import { initials, type SessionUser } from '../../types';
 import { useAuth } from '../../stores/auth';
@@ -119,22 +118,18 @@ export function UtilityStrip({ user }: { user: SessionUser }) {
   );
 }
 
-// Institution logo — tries /leos-logo.svg then /leos-logo.png, falls back to icon.
+// Institution logo — tries /leos-logo.svg then /leos-logo.png.
+// If neither exists, renders nothing (school name is shown beside it).
 function SchoolMark() {
-  const [stage, setStage] = useState<'svg' | 'png' | 'icon'>('svg');
-  if (stage === 'icon') {
-    return (
-      <ThemeIcon size={28} radius="md" variant="white" color="brand">
-        <School size={17} strokeWidth={2} />
-      </ThemeIcon>
-    );
-  }
+  const [stage, setStage] = useState<'svg' | 'png' | 'hidden'>('svg');
+  if (stage === 'hidden') return null;
   return (
     <img
       src={stage === 'svg' ? '/leos-logo.svg' : '/leos-logo.png'}
-      alt="LEOS"
+      alt=""
+      aria-hidden
       style={{ display: 'block', width: 'auto', height: 28, maxHeight: 28 }}
-      onError={() => setStage((s) => (s === 'svg' ? 'png' : 'icon'))}
+      onError={() => setStage((s) => (s === 'svg' ? 'png' : 'hidden'))}
     />
   );
 }

@@ -39,7 +39,7 @@ export function CockpitShell({ user, active, onNavigate, children }: CockpitShel
   return (
     <>
       <CommandPalette onNavigate={onNavigate} />
-      <AppShell header={{ height: 138 }} padding="md">
+      <AppShell header={{ height: 160 }} padding="md">
         <AppShell.Header style={{ borderBottom: 'none' }}>
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* Deep Graphite utility strip */}
@@ -52,7 +52,7 @@ export function CockpitShell({ user, active, onNavigate, children }: CockpitShel
             >
               <UtilityStrip user={user} />
             </div>
-            {/* Tab strip + action ribbon (94px total) */}
+            {/* Tab strip + action ribbon (116px total) */}
             <div style={{ flex: 1, minHeight: 0 }}>
               <TopRibbon active={active} onSelect={onNavigate} />
             </div>
