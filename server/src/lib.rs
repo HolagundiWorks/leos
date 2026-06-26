@@ -132,8 +132,38 @@ fn dispatch(
     if method == &Method::Get && path == "/courses" {
         return with_auth(state, token, |_| courses_list(state));
     }
+    if method == &Method::Post && path == "/courses" {
+        return with_auth(state, token, |_| course_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/courses/") && path.ends_with("/update") {
+        let id_str = &path["/courses/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| course_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/courses/") && path.ends_with("/delete") {
+        let id_str = &path["/courses/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| course_delete(state, id));
+        }
+    }
     if method == &Method::Get && path == "/subjects" {
         return with_auth(state, token, |_| subjects_list(state, url));
+    }
+    if method == &Method::Post && path == "/subjects" {
+        return with_auth(state, token, |_| subject_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/subjects/") && path.ends_with("/update") {
+        let id_str = &path["/subjects/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| subject_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/subjects/") && path.ends_with("/delete") {
+        let id_str = &path["/subjects/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| subject_delete(state, id));
+        }
     }
     if method == &Method::Get && path == "/classrooms" {
         return with_auth(state, token, |_| classrooms_list(state));
@@ -842,6 +872,95 @@ fn seed_academics(conn: &Connection) {
         )
         .unwrap();
     }
+}
+
+fn course_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "name required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute("INSERT INTO courses(name) VALUES(?1)", params![name]) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn course_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE courses SET name=COALESCE(?1, name) WHERE id=?2",
+        params![v["name"].as_str().filter(|s| !s.is_empty()), id],
+    ) {
+        Ok(0) => (404, json!({"error": "course not found"})),
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn course_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    conn.execute("UPDATE subjects SET course_id=NULL WHERE course_id=?1", params![id]).ok();
+    conn.execute("DELETE FROM courses WHERE id=?1", params![id]).ok();
+    (200, json!({"ok": true}))
+}
+
+fn subject_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "name required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO subjects(course_id, name, code, type, weekly_periods, is_lab, mandatory) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        params![
+            v["course_id"].as_i64(),
+            name,
+            v["code"].as_str().filter(|s| !s.is_empty()),
+            v["type"].as_str().filter(|s| !s.is_empty()),
+            v["weekly_periods"].as_i64().unwrap_or(0),
+            v["is_lab"].as_bool().unwrap_or(false) as i64,
+            v["mandatory"].as_bool().unwrap_or(true) as i64,
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn subject_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE subjects SET course_id=?1, name=COALESCE(?2,name), code=?3, type=?4,
+         weekly_periods=COALESCE(?5,weekly_periods), is_lab=COALESCE(?6,is_lab), mandatory=COALESCE(?7,mandatory)
+         WHERE id=?8",
+        params![
+            v["course_id"].as_i64(),
+            v["name"].as_str().filter(|s| !s.is_empty()),
+            v["code"].as_str().map(str::to_string),
+            v["type"].as_str().map(str::to_string),
+            v["weekly_periods"].as_i64(),
+            v["is_lab"].as_bool().map(|b| b as i64),
+            v["mandatory"].as_bool().map(|b| b as i64),
+            id,
+        ],
+    ) {
+        Ok(0) => (404, json!({"error": "subject not found"})),
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn subject_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    conn.execute("DELETE FROM teacher_subjects WHERE subject_id=?1", params![id]).ok();
+    conn.execute("UPDATE timetable_entries SET subject_id=NULL WHERE subject_id=?1", params![id]).ok();
+    conn.execute("DELETE FROM subjects WHERE id=?1", params![id]).ok();
+    (200, json!({"ok": true}))
 }
 
 fn courses_list(state: &AppState) -> (u16, Value) {

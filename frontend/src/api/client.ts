@@ -214,6 +214,15 @@ export interface CoursesResponse {
 export function fetchCourses(token: string) {
   return req<CoursesResponse>('/courses', { token });
 }
+export function createCourse(token: string, data: { name: string }) {
+  return req<{ ok: boolean; id: number }>('/courses', { method: 'POST', token, body: data });
+}
+export function updateCourse(token: string, id: number, data: { name: string }) {
+  return req<{ ok: boolean }>(`/courses/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteCourse(token: string, id: number) {
+  return req<{ ok: boolean }>(`/courses/${id}/delete`, { method: 'POST', token, body: {} });
+}
 
 export interface Subject {
   id: number;
@@ -233,6 +242,25 @@ export function fetchSubjects(token: string, params: { q?: string } = {}) {
   if (params.q) qs.set('q', params.q);
   const suffix = qs.toString() ? `?${qs}` : '';
   return req<SubjectsResponse>(`/subjects${suffix}`, { token });
+}
+
+export interface SubjectFormData {
+  name: string;
+  code?: string;
+  type?: string;
+  course_id?: number | null;
+  weekly_periods?: number;
+  is_lab?: boolean;
+  mandatory?: boolean;
+}
+export function createSubject(token: string, data: SubjectFormData) {
+  return req<{ ok: boolean; id: number }>('/subjects', { method: 'POST', token, body: data });
+}
+export function updateSubject(token: string, id: number, data: Partial<SubjectFormData>) {
+  return req<{ ok: boolean }>(`/subjects/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteSubject(token: string, id: number) {
+  return req<{ ok: boolean }>(`/subjects/${id}/delete`, { method: 'POST', token, body: {} });
 }
 
 export interface Classroom {
