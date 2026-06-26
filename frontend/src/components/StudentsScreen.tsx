@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Avatar,
   Badge,
+  Button,
   Card,
   Container,
   Group,
@@ -11,12 +12,13 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import type { Student } from '../api/client';
 import { useStudents } from '../hooks/useStudents';
 import { useSelection } from '../stores/selection';
 import { initials } from '../types';
 import { accentColors, type AccentColor } from '../theme';
+import { StudentFormModal } from './StudentFormModal';
 
 function colorFor(id: number): AccentColor {
   return accentColors[id % accentColors.length];
@@ -72,6 +74,7 @@ function StudentRow({
 
 export function StudentsScreen() {
   const [q, setQ] = useState('');
+  const [admitting, setAdmitting] = useState(false);
   const { data, isLoading } = useStudents(q);
   const selected = useSelection((s) => s.student);
   const selectStudent = useSelection((s) => s.selectStudent);
@@ -83,16 +86,21 @@ export function StudentsScreen() {
           <div>
             <Title order={2}>Students</Title>
             <Text c="dimmed">
-              {data ? `${data.total} enrolled · select a row for actions` : 'Loading…'}
+              {data ? `${data.total} students · select a row for actions` : 'Loading…'}
             </Text>
           </div>
-          <TextInput
-            w={260}
-            leftSection={<Search size={16} />}
-            placeholder="Search students"
-            value={q}
-            onChange={(e) => setQ(e.currentTarget.value)}
-          />
+          <Group gap="sm" wrap="nowrap">
+            <TextInput
+              w={240}
+              leftSection={<Search size={16} />}
+              placeholder="Search students"
+              value={q}
+              onChange={(e) => setQ(e.currentTarget.value)}
+            />
+            <Button leftSection={<Plus size={15} />} onClick={() => setAdmitting(true)}>
+              Admit
+            </Button>
+          </Group>
         </Group>
 
         <Stack gap="xs">
@@ -118,6 +126,8 @@ export function StudentsScreen() {
           )}
         </Stack>
       </Stack>
+
+      {admitting && <StudentFormModal onClose={() => setAdmitting(false)} />}
     </Container>
   );
 }

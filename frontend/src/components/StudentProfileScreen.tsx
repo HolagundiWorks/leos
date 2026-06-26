@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Avatar,
   Badge,
@@ -11,10 +12,11 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useStudent } from '../hooks/useStudent';
 import { initials } from '../types';
+import { StudentFormModal } from './StudentFormModal';
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -31,6 +33,7 @@ const SECONDARY_TABS = ['attendance', 'fees', 'academics', 'documents'] as const
 
 export function StudentProfileScreen({ id, onBack }: { id: number; onBack: () => void }) {
   const { data: s, isLoading } = useStudent(id);
+  const [editing, setEditing] = useState(false);
   const name = s
     ? `${s.first_name} ${s.middle_name ? s.middle_name + ' ' : ''}${s.last_name}`
         .replace(/\s+/g, ' ')
@@ -80,6 +83,15 @@ export function StudentProfileScreen({ id, onBack }: { id: number; onBack: () =>
               <Badge color="mint" variant="light">
                 Active
               </Badge>
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<Pencil size={13} />}
+                onClick={() => setEditing(true)}
+                disabled={!s}
+              >
+                Edit
+              </Button>
             </Group>
           </Group>
         </Card>
@@ -105,6 +117,10 @@ export function StudentProfileScreen({ id, onBack }: { id: number; onBack: () =>
                   value={s?.birthdate ? dayjs(s.birthdate).format('D MMM YYYY') : null}
                 />
                 <Field label="Admission ID" value={admission} />
+                <Field label="Guardian" value={s?.guardian_name} />
+                <Field label="Guardian phone" value={s?.guardian_phone} />
+                <Field label="Relation" value={s?.guardian_relation} />
+                {s?.address && <Field label="Address" value={s.address} />}
               </SimpleGrid>
             </Tabs.Panel>
 
@@ -118,6 +134,10 @@ export function StudentProfileScreen({ id, onBack }: { id: number; onBack: () =>
           </Tabs>
         </Card>
       </Stack>
+
+      {editing && s && (
+        <StudentFormModal initial={s} onClose={() => setEditing(false)} />
+      )}
     </Container>
   );
 }

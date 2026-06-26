@@ -97,13 +97,31 @@ fn dispatch(
     if method == &Method::Get && path == "/students" {
         return with_auth(state, token, |_| students_list(state, url));
     }
+    if method == &Method::Post && path == "/students" {
+        return with_auth(state, token, |_| student_create(state, body));
+    }
     if method == &Method::Get && path.starts_with("/students/") {
         if let Ok(id) = path["/students/".len()..].parse::<i64>() {
             return with_auth(state, token, |_| student_detail(state, id));
         }
     }
+    if method == &Method::Post && path.starts_with("/students/") && path.ends_with("/update") {
+        let id_str = &path["/students/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| student_update(state, id, body));
+        }
+    }
     if method == &Method::Get && path == "/staff" {
         return with_auth(state, token, |_| staff_list(state, url));
+    }
+    if method == &Method::Post && path == "/staff" {
+        return with_auth(state, token, |_| staff_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/staff/") && path.ends_with("/update") {
+        let id_str = &path["/staff/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| staff_update(state, id, body));
+        }
     }
     if method == &Method::Get && path == "/dashboard/summary" {
         return with_auth(state, token, |_| (200, json!({"summary": dashboard_summary(state)})));
@@ -323,10 +341,77 @@ fn students_list(state: &AppState, url: &str) -> (u16, Value) {
     }
 }
 
+fn student_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let first = match v["first_name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "first_name required"})),
+    };
+    let last = match v["last_name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "last_name required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO students(first_name, middle_name, last_name, email, phone, gender, birthdate, alt_id, enrolled, guardian_name, guardian_phone, guardian_relation, address)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+        params![
+            first,
+            v["middle_name"].as_str().filter(|s| !s.is_empty()),
+            last,
+            v["email"].as_str().filter(|s| !s.is_empty()),
+            v["phone"].as_str().filter(|s| !s.is_empty()),
+            v["gender"].as_str().filter(|s| !s.is_empty()),
+            v["birthdate"].as_str().filter(|s| !s.is_empty()),
+            v["alt_id"].as_str().filter(|s| !s.is_empty()),
+            v["enrolled"].as_bool().unwrap_or(false) as i64,
+            v["guardian_name"].as_str().filter(|s| !s.is_empty()),
+            v["guardian_phone"].as_str().filter(|s| !s.is_empty()),
+            v["guardian_relation"].as_str().filter(|s| !s.is_empty()),
+            v["address"].as_str().filter(|s| !s.is_empty()),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn student_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE students SET first_name=COALESCE(?1,first_name), middle_name=?2, last_name=COALESCE(?3,last_name),
+         email=?4, phone=?5, gender=?6, birthdate=?7, alt_id=?8, enrolled=?9,
+         guardian_name=?10, guardian_phone=?11, guardian_relation=?12, address=?13
+         WHERE id=?14",
+        params![
+            v["first_name"].as_str().filter(|s| !s.is_empty()),
+            v["middle_name"].as_str().map(str::to_string),
+            v["last_name"].as_str().filter(|s| !s.is_empty()),
+            v["email"].as_str().map(str::to_string),
+            v["phone"].as_str().map(str::to_string),
+            v["gender"].as_str().map(str::to_string),
+            v["birthdate"].as_str().map(str::to_string),
+            v["alt_id"].as_str().map(str::to_string),
+            v["enrolled"].as_bool().map(|b| b as i64),
+            v["guardian_name"].as_str().map(str::to_string),
+            v["guardian_phone"].as_str().map(str::to_string),
+            v["guardian_relation"].as_str().map(str::to_string),
+            v["address"].as_str().map(str::to_string),
+            id,
+        ],
+    ) {
+        Ok(0) => (404, json!({"error": "student not found"})),
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
 fn student_detail(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let r = conn.query_row(
-        "SELECT id, first_name, middle_name, last_name, email, phone, gender, birthdate, alt_id \
+        "SELECT id, first_name, middle_name, last_name, email, phone, gender, birthdate, alt_id, enrolled,
+                guardian_name, guardian_phone, guardian_relation, address
          FROM students WHERE id = ?1",
         params![id],
         |r| {
@@ -340,12 +425,73 @@ fn student_detail(state: &AppState, id: i64) -> (u16, Value) {
                 "gender": r.get::<_, Option<String>>(6)?,
                 "birthdate": r.get::<_, Option<String>>(7)?,
                 "alt_id": r.get::<_, Option<String>>(8)?,
+                "enrolled": r.get::<_, i64>(9)? == 1,
+                "guardian_name": r.get::<_, Option<String>>(10)?,
+                "guardian_phone": r.get::<_, Option<String>>(11)?,
+                "guardian_relation": r.get::<_, Option<String>>(12)?,
+                "address": r.get::<_, Option<String>>(13)?,
             }))
         },
     );
     match r {
         Ok(s) => (200, json!({"student": s})),
         Err(_) => (404, json!({"error": "student not found"})),
+    }
+}
+
+fn staff_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let first = match v["first_name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "first_name required"})),
+    };
+    let last = match v["last_name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "last_name required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO staff(first_name, last_name, email, phone, profile, title, department, join_date, employee_id)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        params![
+            first, last,
+            v["email"].as_str().filter(|s| !s.is_empty()),
+            v["phone"].as_str().filter(|s| !s.is_empty()),
+            v["profile"].as_str().unwrap_or("teacher"),
+            v["title"].as_str().filter(|s| !s.is_empty()),
+            v["department"].as_str().filter(|s| !s.is_empty()),
+            v["join_date"].as_str().filter(|s| !s.is_empty()),
+            v["employee_id"].as_str().filter(|s| !s.is_empty()),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn staff_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE staff SET first_name=COALESCE(?1,first_name), last_name=COALESCE(?2,last_name),
+         email=?3, phone=?4, profile=COALESCE(?5,profile), title=?6, department=?7, join_date=?8, employee_id=?9
+         WHERE id=?10",
+        params![
+            v["first_name"].as_str().filter(|s| !s.is_empty()),
+            v["last_name"].as_str().filter(|s| !s.is_empty()),
+            v["email"].as_str().map(str::to_string),
+            v["phone"].as_str().map(str::to_string),
+            v["profile"].as_str().filter(|s| !s.is_empty()),
+            v["title"].as_str().map(str::to_string),
+            v["department"].as_str().map(str::to_string),
+            v["join_date"].as_str().map(str::to_string),
+            v["employee_id"].as_str().map(str::to_string),
+            id,
+        ],
+    ) {
+        Ok(0) => (404, json!({"error": "staff not found"})),
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
     }
 }
 
@@ -477,9 +623,16 @@ fn init_db(conn: &Connection) {
     )
     .expect("create schema");
 
-    // Migrate older DBs.
+    // Migrations for older DBs.
     let _ = conn.execute("ALTER TABLE schools ADD COLUMN type TEXT", []);
     let _ = conn.execute("UPDATE schools SET type='school' WHERE type IS NULL OR type=''", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_phone TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_relation TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN address TEXT", []);
+    let _ = conn.execute("ALTER TABLE staff ADD COLUMN department TEXT", []);
+    let _ = conn.execute("ALTER TABLE staff ADD COLUMN join_date TEXT", []);
+    let _ = conn.execute("ALTER TABLE staff ADD COLUMN employee_id TEXT", []);
 
     if count(conn, "SELECT COUNT(*) FROM users") == 0 {
         seed(conn);

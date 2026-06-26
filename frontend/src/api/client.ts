@@ -119,11 +119,60 @@ export function fetchStudents(
 export interface StudentDetail extends Student {
   middle_name: string | null;
   alt_id: string | null;
+  enrolled: boolean;
+  guardian_name: string | null;
+  guardian_phone: string | null;
+  guardian_relation: string | null;
+  address: string | null;
+}
+
+export interface StudentFormData {
+  first_name: string;
+  middle_name?: string;
+  last_name: string;
+  gender?: string;
+  birthdate?: string;
+  email?: string;
+  phone?: string;
+  alt_id?: string;
+  enrolled?: boolean;
+  guardian_name?: string;
+  guardian_phone?: string;
+  guardian_relation?: string;
+  address?: string;
+}
+
+export function createStudent(token: string, data: StudentFormData) {
+  return req<{ ok: boolean; id: number }>('/students', { method: 'POST', token, body: data });
+}
+
+export function updateStudent(token: string, id: number, data: Partial<StudentFormData>) {
+  return req<{ ok: boolean }>(`/students/${id}/update`, { method: 'POST', token, body: data });
 }
 
 export async function fetchStudent(token: string, id: number) {
   const { student } = await req<{ student: StudentDetail }>(`/students/${id}`, { token });
   return student;
+}
+
+export interface StaffFormData {
+  first_name: string;
+  last_name: string;
+  email?: string;
+  phone?: string;
+  profile?: string;
+  title?: string;
+  department?: string;
+  join_date?: string;
+  employee_id?: string;
+}
+
+export function createStaff(token: string, data: StaffFormData) {
+  return req<{ ok: boolean; id: number }>('/staff', { method: 'POST', token, body: data });
+}
+
+export function updateStaff(token: string, id: number, data: Partial<StaffFormData>) {
+  return req<{ ok: boolean }>(`/staff/${id}/update`, { method: 'POST', token, body: data });
 }
 
 export interface Staff {
