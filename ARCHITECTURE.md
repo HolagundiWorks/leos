@@ -20,9 +20,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started · ⚠️ conflicts with cur
 **Status (2026-06-26):** the Rust `server/` (tiny_http + rusqlite) now serves
 `auth`, `students`(+detail), `staff`, `dashboard/summary|today` over **SQLite**
 on `:8787`; the React app is re-pointed there (`VITE_API_BASE`). The **PHP API +
-MariaDB/openSIS are retired** as the backend. Remaining for the core: wrap the DB
-in a `.schoolpkg` (open/save), and embed the server in the Tauri process.
-Login is now **`admin` / `admin123`**.
+MariaDB/openSIS are retired** as the backend. The **`.schoolpkg`** portable file
+(ZIP: manifest + school.sqlite + checksum + media/docs) save/open is implemented
+(`/schoolpkg/save|open`). Remaining for the core: embed the server in the Tauri
+process (single `.exe`). Login is now **`admin` / `admin123`**.
 
 ## Stack mapping
 
@@ -32,7 +33,7 @@ Login is now **`admin` / `admin123`**.
 | Tauri desktop shell | ✅ Tauri v2 (MSI/NSIS built) | ✅ |
 | Rust core backend | ✅ HTTP server on `:8787` | ✅ |
 | SQLite | ✅ `school.sqlite` (seeded) | ✅ |
-| `.schoolpkg` file | — | ⬜ next (wrap SQLite + media) |
+| `.schoolpkg` file | ✅ save/open (ZIP) | ✅ |
 | LAN server mode | — | ⬜ new |
 | Zustand | ✅ (+ TanStack Query) | ✅ |
 | Excel (SheetJS/ExcelJS) | — | ⬜ |

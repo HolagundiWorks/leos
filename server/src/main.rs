@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
@@ -107,6 +108,12 @@ fn dispatch(
     }
     if method == &Method::Get && path == "/dashboard/today" {
         return with_auth(state, token, |_| (200, json!({"items": dashboard_today(state)})));
+    }
+    if method == &Method::Post && path == "/schoolpkg/save" {
+        return with_auth(state, token, |_| schoolpkg_save(body));
+    }
+    if method == &Method::Post && path == "/schoolpkg/open" {
+        return with_auth(state, token, |_| schoolpkg_open(state, body));
     }
     (404, json!({"error": "not found"}))
 }
@@ -438,4 +445,79 @@ fn seed(conn: &Connection) {
         )
         .unwrap();
     }
+}
+
+// ---- .schoolpkg portable file (ZIP: manifest + school.sqlite + media/docs) ----
+
+fn schoolpkg_save(body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let out = v["path"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("HCW-SMS.schoolpkg")
+        .to_string();
+    match write_schoolpkg(&out) {
+        Ok(checksum) => (200, json!({"ok": true, "path": out, "checksum": checksum})),
+        Err(e) => (500, json!({"error": format!("save failed: {e}")})),
+    }
+}
+
+fn write_schoolpkg(out: &str) -> Result<String, Box<dyn std::error::Error>> {
+    use std::io::Write;
+    let sqlite_bytes = std::fs::read("school.sqlite")?;
+    let checksum = sha256_hex(&sqlite_bytes);
+    let created = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let manifest =
+        json!({"app": "HCW-SMS", "schema": 1, "created": created, "files": ["school.sqlite"]})
+            .to_string();
+    let checksum_json = json!({"school.sqlite": checksum}).to_string();
+    let file = std::fs::File::create(out)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default();
+    zip.start_file("manifest.json", opts)?;
+    zip.write_all(manifest.as_bytes())?;
+    zip.start_file("school.sqlite", opts)?;
+    zip.write_all(&sqlite_bytes)?;
+    zip.start_file("checksum.json", opts)?;
+    zip.write_all(checksum_json.as_bytes())?;
+    zip.add_directory("media/", opts)?;
+    zip.add_directory("documents/", opts)?;
+    zip.finish()?;
+    Ok(checksum)
+}
+
+fn schoolpkg_open(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let path = match v["path"].as_str() {
+        Some(p) if !p.is_empty() => p.to_string(),
+        _ => return (422, json!({"error": "path required"})),
+    };
+    match read_schoolpkg(state, &path) {
+        Ok(()) => (200, json!({"ok": true, "opened": path})),
+        Err(e) => (500, json!({"error": format!("open failed: {e}")})),
+    }
+}
+
+fn read_schoolpkg(state: &AppState, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let file = std::fs::File::open(path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+    let mut sqlite_bytes = Vec::new();
+    archive.by_name("school.sqlite")?.read_to_end(&mut sqlite_bytes)?;
+    // Swap the live connection: close it, replace the working DB, reopen.
+    let mut g = state.conn.lock().unwrap();
+    let old = std::mem::replace(&mut *g, Connection::open_in_memory()?);
+    drop(old);
+    std::fs::write("school.sqlite", &sqlite_bytes)?;
+    *g = Connection::open("school.sqlite")?;
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(bytes);
+    h.finalize().iter().map(|b| format!("{:02x}", b)).collect()
 }

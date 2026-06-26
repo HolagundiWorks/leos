@@ -10,3 +10,5 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 serde_json = "1"
 bcrypt = "0.15"
 uuid = { version = "1", features = ["v4"] }
+zip = "2"
+sha2 = "0.10"
