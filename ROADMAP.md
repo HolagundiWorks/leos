@@ -165,6 +165,11 @@ remain. Also added a Tally-style **pre-login flow**:
    file's `meta` table); verified before the DB is swapped in
 3. **Sign in** — validates against that file's users
 
+The welcome screen can also **create a new empty school**: name, institution
+type, file name, and a master key → server builds a fresh `.leosdb` with the
+full schema + module/role config but **no demo data** (just admin + master
+key + the school record), then opens it.
+
 Defaults: master key **ChangeMe@3201**, login **admin / ChangeMe@3201**.
 
 Note: master key is an access gate (hash-verified), not yet at-rest

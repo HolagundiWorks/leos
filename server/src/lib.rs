@@ -777,6 +777,10 @@ fn dispatch(
     if method == &Method::Post && path == "/school/open" {
         return leosdb_open(state, body);
     }
+    // Create a fresh, empty school file (schema + admin + master key only).
+    if method == &Method::Post && path == "/school/new" {
+        return school_new(body);
+    }
     if method == &Method::Get && path == "/academic-years" {
         return with_auth(state, token, |_| academic_years_list(state));
     }
@@ -4674,8 +4678,12 @@ fn leosdb_save(body: &str) -> (u16, Value) {
 }
 
 fn write_leosdb(out: &str) -> Result<String, Box<dyn std::error::Error>> {
+    write_leosdb_from("school.sqlite", out)
+}
+
+fn write_leosdb_from(src_sqlite: &str, out: &str) -> Result<String, Box<dyn std::error::Error>> {
     use std::io::Write;
-    let sqlite_bytes = std::fs::read("school.sqlite")?;
+    let sqlite_bytes = std::fs::read(src_sqlite)?;
     let checksum = sha256_hex(&sqlite_bytes);
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -4724,6 +4732,70 @@ fn leosdb_open(state: &AppState, body: &str) -> (u16, Value) {
     match swap_active_db(state, &sqlite_bytes) {
         Ok(()) => (200, json!({"ok": true, "opened": path})),
         Err(e) => (500, json!({"error": format!("open failed: {e}")})),
+    }
+}
+
+/// Create a brand-new, empty school file at `path`: full schema and config
+/// (modules, roles) but no demo data — just an admin login, the master key,
+/// and the school record, ready to set up.
+fn school_new(body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let path = match v["path"].as_str() {
+        Some(p) if !p.is_empty() => p.to_string(),
+        _ => return (422, json!({"error": "path required"})),
+    };
+    let master_key = match v["master_key"].as_str() {
+        Some(k) if !k.is_empty() => k.to_string(),
+        _ => return (422, json!({"error": "master_key required"})),
+    };
+    let name = v["school_name"].as_str().filter(|s| !s.is_empty()).unwrap_or("My School").to_string();
+    let ay = v["academic_year"].as_str().filter(|s| !s.is_empty()).unwrap_or("2026-27").to_string();
+    let itype = v["institution_type"].as_str().filter(|s| !s.is_empty()).unwrap_or("school").to_string();
+    let admin_pw = v["admin_password"].as_str().filter(|s| !s.is_empty()).unwrap_or("ChangeMe@3201").to_string();
+
+    let tmp = std::env::temp_dir().join(format!("leos-new-{}.sqlite", std::process::id()));
+    let _ = std::fs::remove_file(&tmp);
+
+    let build = (|| -> Result<(), Box<dyn std::error::Error>> {
+        let conn = Connection::open(&tmp)?;
+        init_db(&conn); // full schema + config + demo seed
+        // Strip every data table; keep config tables (meta, module_settings, roles).
+        let keep = ["meta", "module_settings", "roles"];
+        let mut tables: Vec<String> = Vec::new();
+        {
+            let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")?;
+            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            for n in rows { tables.push(n?); }
+        }
+        for t in &tables {
+            if !keep.contains(&t.as_str()) {
+                let _ = conn.execute(&format!("DELETE FROM \"{t}\""), []);
+            }
+        }
+        let _ = conn.execute("DELETE FROM sqlite_sequence", []); // reset autoincrement counters
+
+        // Seed the essentials for a ready-to-use blank school.
+        let pw = bcrypt::hash(&admin_pw, bcrypt::DEFAULT_COST)?;
+        conn.execute(
+            "INSERT INTO users(username, password_hash, role, name) VALUES('admin', ?1, 'admin', 'Administrator')",
+            params![pw],
+        )?;
+        let mk = bcrypt::hash(&master_key, bcrypt::DEFAULT_COST)?;
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('master_key_hash', ?1)", params![mk])?;
+        conn.execute("INSERT INTO schools(name, academic_year, type) VALUES(?1, ?2, ?3)", params![name, ay, itype])?;
+        Ok(())
+    })();
+
+    if let Err(e) = build {
+        let _ = std::fs::remove_file(&tmp);
+        return (500, json!({"error": format!("create failed: {e}")}));
+    }
+
+    let result = write_leosdb_from(&tmp.to_string_lossy(), &path);
+    let _ = std::fs::remove_file(&tmp);
+    match result {
+        Ok(checksum) => (200, json!({"ok": true, "path": path, "checksum": checksum})),
+        Err(e) => (500, json!({"error": format!("create failed: {e}")})),
     }
 }
 
