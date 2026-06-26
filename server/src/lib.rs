@@ -572,6 +572,31 @@ fn dispatch(
             return with_auth(state, token, |_| visitor_delete(state, id));
         }
     }
+    // Library OS
+    if method == &Method::Get && path == "/library/books" {
+        return with_auth(state, token, |_| library_books_list(state, url));
+    }
+    if method == &Method::Post && path == "/library/books" {
+        return with_auth(state, token, |_| library_book_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/library/books/") && path.ends_with("/delete") {
+        let id_str = &path["/library/books/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| library_book_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/library/loans" {
+        return with_auth(state, token, |_| library_loans_list(state, url));
+    }
+    if method == &Method::Post && path == "/library/loans" {
+        return with_auth(state, token, |u| library_loan_issue(state, body, u));
+    }
+    if method == &Method::Post && path.starts_with("/library/loans/") && path.ends_with("/return") {
+        let id_str = &path["/library/loans/".len()..path.len() - "/return".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| library_loan_return(state, id));
+        }
+    }
     // Fee OS (P6)
     if method == &Method::Get && path == "/fee-heads" {
         return with_auth(state, token, |_| fee_heads_list(state));
@@ -1423,6 +1448,8 @@ fn init_db(conn: &Connection) {
          CREATE TABLE IF NOT EXISTS transport_assignments(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, route_id INTEGER NOT NULL, stop_id INTEGER, created_at TEXT DEFAULT (datetime('now')), UNIQUE(student_id));
          CREATE TABLE IF NOT EXISTS issued_items(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, item_type TEXT NOT NULL, issued INTEGER DEFAULT 0, issued_date TEXT, marked_by INTEGER, UNIQUE(student_id, item_type));
          CREATE TABLE IF NOT EXISTS visitors(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT, purpose TEXT, whom_to_meet TEXT, date TEXT NOT NULL, in_time TEXT, out_time TEXT, created_by INTEGER, created_at TEXT DEFAULT (datetime('now')));
+         CREATE TABLE IF NOT EXISTS library_books(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, author TEXT, isbn TEXT, category TEXT, total_copies INTEGER DEFAULT 1, available_copies INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')));
+         CREATE TABLE IF NOT EXISTS library_loans(id INTEGER PRIMARY KEY AUTOINCREMENT, book_id INTEGER NOT NULL, student_id INTEGER NOT NULL, issued_date TEXT DEFAULT (date('now')), due_date TEXT, returned_date TEXT, created_by INTEGER, created_at TEXT DEFAULT (datetime('now')));
          CREATE TABLE IF NOT EXISTS fee_heads(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, is_optional INTEGER DEFAULT 0);
          CREATE TABLE IF NOT EXISTS fee_structures(id INTEGER PRIMARY KEY AUTOINCREMENT, academic_year_id INTEGER, class_id INTEGER, fee_head_id INTEGER NOT NULL, amount REAL NOT NULL, due_date TEXT, UNIQUE(academic_year_id, class_id, fee_head_id));
          CREATE TABLE IF NOT EXISTS fee_payments(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, fee_head_id INTEGER NOT NULL, academic_year_id INTEGER, amount_paid REAL NOT NULL, payment_date TEXT DEFAULT (date('now')), payment_mode TEXT DEFAULT 'cash', reference TEXT, receipt_no TEXT, collected_by INTEGER, notes TEXT, created_at TEXT DEFAULT (datetime('now')));
@@ -3208,6 +3235,131 @@ fn visitor_checkout(state: &AppState, id: i64) -> (u16, Value) {
 fn visitor_delete(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let _ = conn.execute("DELETE FROM visitors WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+// ---- Library OS ----
+
+fn library_books_list(state: &AppState, url: &str) -> (u16, Value) {
+    let q = q_param(url, "q");
+    let like = q.as_ref().map(|s| format!("%{s}%"));
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, title, author, isbn, category, total_copies, available_copies
+         FROM library_books
+         WHERE (?1 IS NULL OR title LIKE ?1 OR author LIKE ?1 OR category LIKE ?1)
+         ORDER BY title",
+    ) { Ok(s) => s, Err(e) => return (500, json!({"error": format!("{e}")})) };
+    let rows: Vec<Value> = match stmt.query_map(params![like], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "title": r.get::<_, String>(1)?,
+            "author": r.get::<_, Option<String>>(2)?,
+            "isbn": r.get::<_, Option<String>>(3)?,
+            "category": r.get::<_, Option<String>>(4)?,
+            "total_copies": r.get::<_, i64>(5)?,
+            "available_copies": r.get::<_, i64>(6)?,
+        }))
+    }) { Ok(m) => m.filter_map(|r| r.ok()).collect(), Err(e) => return (500, json!({"error": format!("{e}")})) };
+    (200, json!({"books": rows, "total": rows.len()}))
+}
+
+fn library_book_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let title = match v["title"].as_str() { Some(t) if !t.is_empty() => t.to_string(), _ => return (422, json!({"error": "title required"})) };
+    let copies = v["total_copies"].as_i64().unwrap_or(1).max(1);
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO library_books(title, author, isbn, category, total_copies, available_copies) VALUES(?1,?2,?3,?4,?5,?5)",
+        params![
+            title,
+            v["author"].as_str().map(|s| s.to_string()),
+            v["isbn"].as_str().map(|s| s.to_string()),
+            v["category"].as_str().map(|s| s.to_string()),
+            copies,
+        ],
+    ) {
+        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn library_book_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM library_loans WHERE book_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM library_books WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn library_loans_list(state: &AppState, url: &str) -> (u16, Value) {
+    // status=active (default) shows only un-returned loans; status=all shows history.
+    let all = q_param(url, "status").as_deref() == Some("all");
+    let conn = state.conn.lock().unwrap();
+    let sql = if all {
+        "SELECT l.id, l.book_id, b.title, l.student_id, s.first_name, s.last_name,
+                l.issued_date, l.due_date, l.returned_date
+         FROM library_loans l
+         JOIN library_books b ON b.id = l.book_id
+         JOIN students s ON s.id = l.student_id
+         ORDER BY (l.returned_date IS NOT NULL), l.due_date"
+    } else {
+        "SELECT l.id, l.book_id, b.title, l.student_id, s.first_name, s.last_name,
+                l.issued_date, l.due_date, l.returned_date
+         FROM library_loans l
+         JOIN library_books b ON b.id = l.book_id
+         JOIN students s ON s.id = l.student_id
+         WHERE l.returned_date IS NULL
+         ORDER BY l.due_date"
+    };
+    let mut stmt = match conn.prepare(sql) { Ok(s) => s, Err(e) => return (500, json!({"error": format!("{e}")})) };
+    let rows: Vec<Value> = match stmt.query_map([], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "book_id": r.get::<_, i64>(1)?,
+            "title": r.get::<_, String>(2)?,
+            "student_id": r.get::<_, i64>(3)?,
+            "first_name": r.get::<_, Option<String>>(4)?,
+            "last_name": r.get::<_, Option<String>>(5)?,
+            "issued_date": r.get::<_, Option<String>>(6)?,
+            "due_date": r.get::<_, Option<String>>(7)?,
+            "returned_date": r.get::<_, Option<String>>(8)?,
+        }))
+    }) { Ok(m) => m.filter_map(|r| r.ok()).collect(), Err(e) => return (500, json!({"error": format!("{e}")})) };
+    (200, json!({"loans": rows, "total": rows.len()}))
+}
+
+fn library_loan_issue(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let book_id = match v["book_id"].as_i64() { Some(x) => x, None => return (422, json!({"error": "book_id required"})) };
+    let student_id = match v["student_id"].as_i64() { Some(x) => x, None => return (422, json!({"error": "student_id required"})) };
+    let due = v["due_date"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let conn = state.conn.lock().unwrap();
+    let avail: i64 = conn.query_row("SELECT available_copies FROM library_books WHERE id=?1", params![book_id], |r| r.get(0)).unwrap_or(0);
+    if avail <= 0 {
+        return (422, json!({"error": "no copies available"}));
+    }
+    let _ = conn.execute(
+        "INSERT INTO library_loans(book_id, student_id, issued_date, due_date, created_by) VALUES(?1,?2,date('now'),?3,?4)",
+        params![book_id, student_id, due, uid],
+    );
+    let _ = conn.execute("UPDATE library_books SET available_copies=available_copies-1 WHERE id=?1 AND available_copies>0", params![book_id]);
+    (200, json!({"ok": true, "id": conn.last_insert_rowid()}))
+}
+
+fn library_loan_return(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let affected = conn.execute(
+        "UPDATE library_loans SET returned_date=date('now') WHERE id=?1 AND returned_date IS NULL",
+        params![id],
+    ).unwrap_or(0);
+    if affected > 0 {
+        // Return a copy to the shelf (capped at total).
+        let _ = conn.execute(
+            "UPDATE library_books SET available_copies=MIN(total_copies, available_copies+1)
+             WHERE id=(SELECT book_id FROM library_loans WHERE id=?1)",
+            params![id],
+        );
+    }
     (200, json!({"ok": true}))
 }
 

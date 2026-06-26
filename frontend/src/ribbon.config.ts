@@ -147,7 +147,7 @@ export const ribbonTabs: RibbonTab[] = [
         label: 'Resource Planning',
         actions: [
           { key: 'teacher-subjects', label: 'Teacher Map', icon: UserCheck, accessLevel: 2 },
-          { key: 'library', label: 'Library', icon: BookOpen, accessLevel: 2, placeholder: true },
+          { key: 'library', label: 'Library', icon: BookOpen, accessLevel: 2 },
         ],
       },
     ],
@@ -196,7 +196,7 @@ export const ribbonTabs: RibbonTab[] = [
           { key: 'attendance', label: 'Attendance', icon: CalendarCheck, accessLevel: 3 },
           { key: 'exams', label: 'Exams', icon: ClipboardList, accessLevel: 2 },
           { key: 'transport', label: 'Transport', icon: Bus, accessLevel: 3 },
-          { key: 'library-ops', label: 'Library', icon: BookOpen, accessLevel: 3, placeholder: true },
+          { key: 'library', label: 'Library', icon: BookOpen, accessLevel: 3 },
         ],
       },
       {

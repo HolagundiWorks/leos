@@ -128,7 +128,7 @@ are the real remaining build targets. Tier = build priority; Gate = dependency.
 | M2 | Transport (vehicles/routes/stops/assignments) | Operations | High | P1 | ✅ done |
 | M3 | Visitor Log (gate check-in/out register) | Operations | Medium | P1 | ✅ done |
 | M4 | **Issued Items** markers (ID/books/uniform, no accounting) | Operations | Medium | P1 | ✅ done |
-| M5 | Library (catalog + issue/return) | Academics + Ops | Medium | P1 | ⬜ |
+| M5 | Library (catalog + issue/return) | Academics + Ops | Medium | P1 | ✅ done |
 | M6 | Finance Reports | Finance | Medium | Fee OS (P6) | ⬜ |
 | M7 | Scholarships / concessions | Finance | Medium | Fee OS (P6) | ⬜ |
 | M8 | Receipts history / reprint | Finance | Low | Fee OS (P6) ✅ collect+print exists | ⬜ |

@@ -31,6 +31,7 @@ import { IdCardScreen } from './components/IdCardScreen';
 import { TransportScreen } from './components/TransportScreen';
 import { IssuedItemsScreen } from './components/IssuedItemsScreen';
 import { VisitorScreen } from './components/VisitorScreen';
+import { LibraryScreen } from './components/LibraryScreen';
 import { ActivityScreen } from './components/ActivityScreen';
 import { BackupScreen } from './components/BackupScreen';
 import { SecurityScreen } from './components/SecurityScreen';
@@ -121,6 +122,8 @@ export function App() {
     screen = <IssuedItemsScreen />;
   } else if (active === 'visitor') {
     screen = <VisitorScreen />;
+  } else if (active === 'library') {
+    screen = <LibraryScreen />;
   } else if (active === 'activities') {
     screen = <ActivityScreen />;
   } else if (active === 'backup') {
