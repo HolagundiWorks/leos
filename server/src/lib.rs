@@ -129,6 +129,12 @@ fn dispatch(
     if method == &Method::Get && path == "/dashboard/today" {
         return with_auth(state, token, |_| (200, json!({"items": dashboard_today(state)})));
     }
+    if method == &Method::Get && path == "/dashboard/meetings-today" {
+        return with_auth(state, token, |_| dashboard_meetings_today(state));
+    }
+    if method == &Method::Get && path == "/dashboard/stats" {
+        return with_auth(state, token, |_| dashboard_stats(state));
+    }
     if method == &Method::Get && path == "/courses" {
         return with_auth(state, token, |_| courses_list(state));
     }
@@ -869,19 +875,126 @@ fn dashboard_today(state: &AppState) -> Vec<Value> {
     let enrolled = count(&conn, "SELECT COUNT(*) FROM students WHERE enrolled = 1");
     let not_enrolled = (total - enrolled).max(0);
     let courses = count(&conn, "SELECT COUNT(*) FROM courses");
-    let grades = count(&conn, "SELECT COUNT(*) FROM gradelevels");
 
     let mut items = Vec::new();
+
+    // ── Core setup prompts ──────────────────────────────────────────────────────
     if not_enrolled > 0 {
         items.push(json!({"key": "enroll", "count": not_enrolled, "label": "students not enrolled in a class", "severity": "warning", "module": "students"}));
-    }
-    if grades == 0 {
-        items.push(json!({"key": "grades", "count": 0, "label": "Define grade levels for the school", "severity": "info", "module": "settings"}));
     }
     if courses == 0 {
         items.push(json!({"key": "courses", "count": 0, "label": "Set up your first course", "severity": "info", "module": "courses"}));
     }
+
+    // ── Pending leave requests ──────────────────────────────────────────────────
+    let pending_leave = conn.query_row(
+        "SELECT COUNT(*) FROM leave_requests WHERE status='pending'", [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    if pending_leave > 0 {
+        items.push(json!({"key": "leave", "count": pending_leave, "label": "leave requests pending approval", "severity": "warning", "module": "staff-os"}));
+    }
+
+    // ── Pending substitutions ──────────────────────────────────────────────────
+    let pending_sub = conn.query_row(
+        "SELECT COUNT(*) FROM substitutions WHERE status='pending'", [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    if pending_sub > 0 {
+        items.push(json!({"key": "substitution", "count": pending_sub, "label": "substitution slots unresolved", "severity": "danger", "module": "substitution"}));
+    }
+
+    // ── Overdue fees ──────────────────────────────────────────────────────────
+    let overdue_fee = conn.query_row(
+        "SELECT COUNT(DISTINCT s.id) FROM students s
+         JOIN (SELECT DISTINCT ss.student_id, se.class_id FROM section_students ss JOIN sections se ON se.id=ss.section_id) sc ON sc.student_id=s.id
+         JOIN fee_structures fs ON (fs.class_id IS NULL OR fs.class_id=sc.class_id)
+         WHERE fs.due_date IS NOT NULL AND fs.due_date < date('now')
+           AND fs.amount > COALESCE((SELECT SUM(fp.amount_paid) FROM fee_payments fp WHERE fp.student_id=s.id AND fp.fee_head_id=fs.fee_head_id), 0)",
+        [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    if overdue_fee > 0 {
+        items.push(json!({"key": "fees", "count": overdue_fee, "label": "students with overdue fees", "severity": "danger", "module": "fees"}));
+    }
+
+    // ── Upcoming exams (within 7 days) ─────────────────────────────────────────
+    let upcoming_exams = conn.query_row(
+        "SELECT COUNT(*) FROM exams WHERE start_date BETWEEN date('now') AND date('now', '+7 days')",
+        [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    if upcoming_exams > 0 {
+        items.push(json!({"key": "exams", "count": upcoming_exams, "label": "exams starting in the next 7 days", "severity": "warning", "module": "exams"}));
+    }
+
+    // ── Overdue tasks ─────────────────────────────────────────────────────────
+    let overdue_tasks = conn.query_row(
+        "SELECT COUNT(*) FROM tasks WHERE status NOT IN ('completed','cancelled') AND due_date < date('now')",
+        [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    if overdue_tasks > 0 {
+        items.push(json!({"key": "tasks", "count": overdue_tasks, "label": "overdue tasks", "severity": "warning", "module": "events"}));
+    }
+
+    // ── Today's meetings ──────────────────────────────────────────────────────
+    let meetings_today = conn.query_row(
+        "SELECT COUNT(*) FROM meetings WHERE date = date('now') AND status != 'cancelled'",
+        [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    if meetings_today > 0 {
+        items.push(json!({"key": "meetings", "count": meetings_today, "label": "meetings scheduled today", "severity": "info", "module": "events"}));
+    }
+
+    // ── Activities this week ──────────────────────────────────────────────────
+    let acts_week = conn.query_row(
+        "SELECT COUNT(*) FROM activities WHERE date BETWEEN date('now') AND date('now', '+7 days') AND status IN ('planned','confirmed')",
+        [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    if acts_week > 0 {
+        items.push(json!({"key": "activities", "count": acts_week, "label": "activities this week", "severity": "info", "module": "activities"}));
+    }
+
     items
+}
+
+fn dashboard_meetings_today(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, title, meeting_type, date, start_time, end_time, venue, status
+         FROM meetings WHERE date=date('now') AND status != 'cancelled'
+         ORDER BY start_time"
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = match stmt.query_map([], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "title": r.get::<_, String>(1)?,
+            "meeting_type": r.get::<_, Option<String>>(2)?,
+            "date": r.get::<_, String>(3)?,
+            "start_time": r.get::<_, Option<String>>(4)?,
+            "end_time": r.get::<_, Option<String>>(5)?,
+            "venue": r.get::<_, Option<String>>(6)?,
+            "status": r.get::<_, Option<String>>(7)?,
+        }))
+    }) {
+        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    (200, json!({"meetings": rows}))
+}
+
+fn dashboard_stats(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let students = count(&conn, "SELECT COUNT(*) FROM students");
+    let staff = count(&conn, "SELECT COUNT(*) FROM staff");
+    let sections = count(&conn, "SELECT COUNT(*) FROM sections");
+    let pending_fees = conn.query_row(
+        "SELECT COUNT(DISTINCT s.id) FROM students s
+         JOIN (SELECT DISTINCT ss.student_id, se.class_id FROM section_students ss JOIN sections se ON se.id=ss.section_id) sc ON sc.student_id=s.id
+         JOIN fee_structures fs ON (fs.class_id IS NULL OR fs.class_id=sc.class_id)
+         WHERE fs.amount > COALESCE((SELECT SUM(fp.amount_paid) FROM fee_payments fp WHERE fp.student_id=s.id AND fp.fee_head_id=fs.fee_head_id), 0)",
+        [], |r| r.get::<_, i64>(0)
+    ).unwrap_or(0);
+    (200, json!({ "students": students, "staff": staff, "sections": sections, "pending_fees": pending_fees }))
 }
 
 // ---- helpers ----
