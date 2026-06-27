@@ -52,7 +52,7 @@ and `msi/LEOS_<ver>_x64_en-US.msi`.
 | Backend as Windows Service (headless / boot autostart) | ⬜ phase 2 (`server-control.md`) |
 | **Code signing** | ⬜ decision — unsigned installers trigger SmartScreen warnings; needs an Authenticode cert |
 | **Default credentials** | ⚠️ decision — see below |
-| **App version** | ⚠️ currently `0.2.0` in `tauri.conf.json`; bump for the release |
+| **App version** | ✅ `0.3.0` (`tauri.conf.json` + `src-tauri/Cargo.toml`); tag the merge commit `v0.3.0` |
 | Installer smoke test on a clean Windows VM | ⬜ manual (see `test-plan.md` §5) |
 
 ## Security notes (decide before shipping)
@@ -70,5 +70,11 @@ and `msi/LEOS_<ver>_x64_en-US.msi`.
 
 ## Versioning
 
-Bump `version` in `src-tauri/tauri.conf.json` (the product/installer version)
-per release, and tag the commit (`git tag vX.Y.Z`).
+The release version is **0.3.0** (`src-tauri/tauri.conf.json` →
+`LEOS_0.3.0_x64-setup.exe`, kept in sync with `src-tauri/Cargo.toml`). For each
+release bump both, then tag the **merge commit on `main`**:
+
+```bash
+git tag -a v0.3.0 -m "LEOS 0.3.0"
+git push origin v0.3.0
+```
