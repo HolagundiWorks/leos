@@ -32,7 +32,7 @@ create / read / update / delete-or-archive.
 | Staff OS / HR | `StaffOSScreen` | leave / HR routes | — | ⬜ |
 | Courses | `CoursesScreen` (read-only UI⚠️) | `GET/POST /courses`, `/courses/:id/update`, `/courses/:id/delete` | C R U D | ✅ A, ✅ D · UI list-only |
 | Subjects | `SubjectsScreen` | `GET/POST /subjects`, `/subjects/:id/update`, `/delete` | C R U D | ✅ E, ✅ A, ✅ D |
-| Classes/Sections | `ClassesScreen` | `GET/POST /classes`, `/sections`, update/delete | C R U D | ⬜ |
+| Classes/Sections | `ClassesScreen` | `GET/POST /classes`, `/sections`, update/delete | C R U D | ✅ E, ✅ A, ✅ D |
 | Classrooms | `ClassroomsScreen` | `GET /classrooms` | C R U D | ⬜ |
 | Teacher map | `TeacherSubjectsScreen` | `GET/POST /teacher-subjects`, `/remove` | C R D | ⬜ |
 | Timings/Periods | `TimingsScreen` | `GET/POST /periods` | C U | ⬜ |

@@ -60,11 +60,11 @@ function ClassFormModal({
   return (
     <Modal opened onClose={onClose} title={isEdit ? 'Edit Class' : 'New Class'} centered size="sm">
       <Stack gap="md">
-        <TextInput label="Class name" placeholder="e.g. Grade 8" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
-        <TextInput label="Grade / level" placeholder="e.g. 8" value={grade} onChange={(e) => setGrade(e.currentTarget.value)} />
+        <TextInput label="Class name" placeholder="e.g. Grade 8" value={name} onChange={(e) => setName(e.currentTarget.value)} required data-testid="class-name-input" />
+        <TextInput label="Grade / level" placeholder="e.g. 8" value={grade} onChange={(e) => setGrade(e.currentTarget.value)} data-testid="class-grade-input" />
         <Group justify="flex-end">
-          <Button variant="subtle" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} loading={busy} disabled={!name.trim()}>{isEdit ? 'Save' : 'Create class'}</Button>
+          <Button variant="subtle" onClick={onClose} data-testid="class-form-cancel-button">Cancel</Button>
+          <Button onClick={save} loading={busy} disabled={!name.trim()} data-testid="class-form-save-button">{isEdit ? 'Save' : 'Create class'}</Button>
         </Group>
       </Stack>
     </Modal>
@@ -130,13 +130,13 @@ function SectionFormModal({
   return (
     <Modal opened onClose={onClose} title={isEdit ? 'Edit Section' : 'Add Section'} centered size="sm">
       <Stack gap="md">
-        <TextInput label="Section name" placeholder="e.g. A" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
+        <TextInput label="Section name" placeholder="e.g. A" value={name} onChange={(e) => setName(e.currentTarget.value)} required data-testid="section-name-input" />
         <Select label="Class teacher" placeholder="Assign teacher…" data={staffOptions} value={teacherId} onChange={setTeacherId} clearable searchable />
         <Select label="Classroom" placeholder="Assign room…" data={roomOptions} value={roomId} onChange={setRoomId} clearable searchable />
         <NumberInput label="Capacity" placeholder="40" value={capacity} onChange={setCapacity} min={1} max={999} />
         <Group justify="flex-end">
-          <Button variant="subtle" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} loading={busy} disabled={!name.trim()}>{isEdit ? 'Save' : 'Add section'}</Button>
+          <Button variant="subtle" onClick={onClose} data-testid="section-form-cancel-button">Cancel</Button>
+          <Button onClick={save} loading={busy} disabled={!name.trim()} data-testid="section-form-save-button">{isEdit ? 'Save' : 'Add section'}</Button>
         </Group>
       </Stack>
     </Modal>
@@ -157,6 +157,8 @@ function SectionRow({
 }) {
   return (
     <Group
+      data-testid="section-row"
+      data-section-id={s.id}
       justify="space-between"
       wrap="nowrap"
       px="sm"
@@ -182,10 +184,10 @@ function SectionRow({
         )}
       </Group>
       <Group gap={4}>
-        <ActionIcon size="sm" variant="subtle" onClick={onEdit} title="Edit section">
+        <ActionIcon size="sm" variant="subtle" onClick={onEdit} title="Edit section" data-testid="section-edit-button">
           <Pencil size={13} />
         </ActionIcon>
-        <ActionIcon size="sm" variant="subtle" color="red" onClick={onDelete} title="Delete section">
+        <ActionIcon size="sm" variant="subtle" color="red" onClick={onDelete} title="Delete section" data-testid="section-delete-button">
           <Trash2 size={13} />
         </ActionIcon>
       </Group>
@@ -216,7 +218,7 @@ function ClassCard({ cls }: { cls: ClassRow }) {
 
   return (
     <>
-      <Card withBorder>
+      <Card withBorder data-testid="class-card" data-class-id={cls.id}>
         <Group justify="space-between" wrap="nowrap" mb={open && cls.sections.length > 0 ? 'sm' : 0}>
           <Group gap="sm" wrap="nowrap">
             <ThemeIcon size={32} radius="md" variant="light" color="brand">
@@ -229,10 +231,10 @@ function ClassCard({ cls }: { cls: ClassRow }) {
             <Badge variant="light" color="gray" size="sm">{cls.sections.length} sections</Badge>
           </Group>
           <Group gap={4}>
-            <Button size="xs" variant="subtle" leftSection={<Plus size={12} />} onClick={() => setAddingSection(true)}>
+            <Button size="xs" variant="subtle" leftSection={<Plus size={12} />} onClick={() => setAddingSection(true)} data-testid="class-add-section-button">
               Section
             </Button>
-            <ActionIcon size="sm" variant="subtle" onClick={() => setEditingClass(true)}>
+            <ActionIcon size="sm" variant="subtle" onClick={() => setEditingClass(true)} data-testid="class-edit-button">
               <Pencil size={13} />
             </ActionIcon>
             <ActionIcon
@@ -242,6 +244,7 @@ function ClassCard({ cls }: { cls: ClassRow }) {
               onClick={() => doDeleteClass.mutate()}
               loading={doDeleteClass.isPending}
               title="Delete class (and all its sections)"
+              data-testid="class-delete-button"
             >
               <Trash2 size={13} />
             </ActionIcon>
@@ -297,7 +300,7 @@ export function ClassesScreen() {
               {data ? `${data.total} classes · click pencil to edit, trash to delete` : 'Loading…'}
             </Text>
           </div>
-          <Button leftSection={<Plus size={15} />} onClick={() => setCreating(true)}>
+          <Button leftSection={<Plus size={15} />} onClick={() => setCreating(true)} data-testid="class-new-button">
             New Class
           </Button>
         </Group>
