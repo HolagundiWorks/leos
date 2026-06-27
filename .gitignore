@@ -13,6 +13,9 @@
 /src-tauri/target/
 /src-tauri/gen/
 
+# Bundled sidecar binary — regenerated at build time by scripts/prepare-build.mjs.
+/src-tauri/binaries/
+
 # Local SQLite DB + portable school files created by the Rust server.
 *.sqlite
 *.sqlite-*

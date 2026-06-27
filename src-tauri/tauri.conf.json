@@ -7,7 +7,7 @@
     "devUrl": "http://localhost:5174",
     "frontendDist": "../frontend/dist",
     "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeBuildCommand": "node ../scripts/prepare-build.mjs"
   },
   "app": {
     "windows": [
@@ -29,6 +29,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": [
+      "binaries/leos-server"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
