@@ -331,23 +331,23 @@ fn dispatch(
     }
     // Tech Admin Panel
     if method == &Method::Get && path == "/admin/system-info" {
-        return with_auth(state, token, |_| admin_system_info(state));
+        return require_level(state, token, 1, |_| admin_system_info(state));
     }
     if method == &Method::Get && path == "/admin/modules" {
-        return with_auth(state, token, |_| admin_modules_list(state));
+        return require_level(state, token, 1, |_| admin_modules_list(state));
     }
     if method == &Method::Post && path.starts_with("/admin/modules/") && path.ends_with("/toggle") {
         let key = &path["/admin/modules/".len()..path.len() - "/toggle".len()];
         let key_owned = key.to_string();
-        return with_auth(state, token, |_| admin_module_toggle(state, &key_owned));
+        return require_level(state, token, 1, |_| admin_module_toggle(state, &key_owned));
     }
     if method == &Method::Get && path == "/admin/users/levels" {
-        return with_auth(state, token, |_| admin_users_levels(state));
+        return require_level(state, token, 1, |_| admin_users_levels(state));
     }
     if method == &Method::Post && path.starts_with("/admin/users/") && path.ends_with("/level") {
         let id_str = &path["/admin/users/".len()..path.len() - "/level".len()];
         if let Ok(id) = id_str.parse::<i64>() {
-            return with_auth(state, token, |_| admin_user_set_level(state, id, body));
+            return require_level(state, token, 1, |_| admin_user_set_level(state, id, body));
         }
     }
     // Design Connect (P14)
@@ -396,7 +396,7 @@ fn dispatch(
     }
     // Security & Audit (P11)
     if method == &Method::Get && path == "/audit-log" {
-        return with_auth(state, token, |_| audit_log_list(state, url));
+        return require_level(state, token, 1, |_| audit_log_list(state, url));
     }
     if method == &Method::Get && path == "/roles" {
         return with_auth(state, token, |_| roles_list(state));
@@ -855,6 +855,50 @@ fn with_auth<F: FnOnce(i64) -> (u16, Value)>(
         Some(id) => f(id),
         None => (401, json!({"error": "missing or invalid token"})),
     }
+}
+
+/// Map a user's profile/role string to an access level (1 = most privileged).
+/// Mirrors `profileToLevel` in frontend/src/ribbon.config.ts so server-side
+/// enforcement matches what the ribbon advertises.
+fn profile_to_level(role: &str) -> i64 {
+    match role.to_lowercase().as_str() {
+        "principal" | "admin" => 1,
+        "teacher" | "timetable_coord" | "exam_coord" | "accountant" | "front_office" => 2,
+        "class_teacher" => 3,
+        "staff" => 4,
+        "parent" | "read_only" | "student" => 5,
+        _ => 3, // safe default (matches the frontend)
+    }
+}
+
+/// Look up the access level of the user behind `uid` from their stored role.
+fn user_level(state: &AppState, uid: i64) -> i64 {
+    let conn = state.conn.lock().unwrap();
+    conn.query_row("SELECT role FROM users WHERE id = ?1", params![uid], |r| {
+        r.get::<_, String>(0)
+    })
+    .map(|role| profile_to_level(&role))
+    .unwrap_or(5) // unknown user → least privilege
+}
+
+/// Like `with_auth`, but also requires the caller's level to be at least as
+/// privileged as `max_level` (i.e. `level <= max_level`). Returns 403 otherwise.
+/// Used to gate privileged routes (e.g. /admin/*) so the API enforces access,
+/// not just the UI. See bug-reports/BUG-20260627-02-security.md.
+fn require_level<F: FnOnce(i64) -> (u16, Value)>(
+    state: &AppState,
+    token: Option<&str>,
+    max_level: i64,
+    f: F,
+) -> (u16, Value) {
+    let uid = match token.and_then(|t| state.sessions.lock().unwrap().get(t).copied()) {
+        Some(id) => id,
+        None => return (401, json!({"error": "missing or invalid token"})),
+    };
+    if user_level(state, uid) > max_level {
+        return (403, json!({"error": "insufficient privileges"}));
+    }
+    f(uid)
 }
 
 // ---- handlers ----
@@ -1952,7 +1996,9 @@ fn admin_module_toggle(state: &AppState, key: &str) -> (u16, Value) {
 fn admin_users_levels(state: &AppState) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let mut stmt = match conn.prepare(
-        "SELECT u.id, u.username, u.name, u.profile, u.level, r.name as role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id ORDER BY u.level, u.name"
+        // `users` has `role` (not `profile`); alias it so the JSON key stays `profile`,
+        // matching /auth/login which returns the role under `profile`.
+        "SELECT u.id, u.username, u.name, u.role AS profile, u.level, r.name as role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id ORDER BY u.level, u.name"
     ) {
         Ok(s) => s,
         Err(e) => return (500, json!({"error": format!("{e}")})),

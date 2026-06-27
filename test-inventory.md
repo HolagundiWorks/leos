@@ -82,7 +82,7 @@ create / read / update / delete-or-archive.
 | Health check (`GET /health`, `GET /`) | ✅ A |
 | Auth required on protected routes (401) | ✅ A |
 | Required-field validation (422) | 🟡 A (students) |
-| Permission matrix — login as L1…L5, assert route allow/deny | ⬜ A |
+| Permission matrix — login as L1…L5, assert route allow/deny | 🟡 A — /admin/* + /audit-log L1-gated & tested (BUG-02 phase 1); general write routes still open (phase 2) |
 | Import / export round-trips | ⬜ |
 | Backup → restore round-trip | ⬜ A |
 | `.leosdb` open/save (native dialog) | ⬜ — Tauri-only; cover the underlying `/school/open`, `/schooldb/save` via API |
