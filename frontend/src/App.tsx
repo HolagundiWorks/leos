@@ -45,6 +45,8 @@ import { DesignScreen } from './components/DesignScreen';
 import { TechAdminScreen } from './components/TechAdminScreen';
 import { ServerControlScreen } from './components/ServerControlScreen';
 import { ServerControlFooter } from './components/ServerControlFooter';
+import { LetterScreen } from './components/LetterScreen';
+import { CertificateScreen } from './components/CertificateScreen';
 import { RoleDashboard } from './components/RoleDashboard';
 import { Placeholder } from './components/Placeholder';
 
@@ -181,6 +183,10 @@ export function App() {
     screen = <TechAdminScreen />;
   } else if (active === 'server-control') {
     screen = <ServerControlScreen />;
+  } else if (active === 'letters') {
+    screen = <LetterScreen />;
+  } else if (active === 'certificates') {
+    screen = <CertificateScreen />;
   } else if (active === 'floorplan') {
     screen = <FloorPlanScreen />;
   } else if (active === 'academic-year') {

@@ -332,6 +332,19 @@ fn dispatch(
     if method == &Method::Post && path == "/school" {
         return with_auth(state, token, |_| school_save(state, body));
     }
+    // Letters & Certificates (document generation).
+    if method == &Method::Get && path == "/letters" {
+        return with_auth(state, token, |_| letters_list(state));
+    }
+    if method == &Method::Post && path == "/letters" {
+        return with_auth(state, token, |_| letter_create(state, body));
+    }
+    if method == &Method::Get && path == "/certificates" {
+        return with_auth(state, token, |_| certificates_list(state));
+    }
+    if method == &Method::Post && path == "/certificates" {
+        return with_auth(state, token, |_| certificate_create(state, body));
+    }
     if method == &Method::Get && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_get(state));
     }
@@ -1622,6 +1635,17 @@ fn init_db(conn: &Connection) {
     // Migrations for older DBs.
     let _ = conn.execute("ALTER TABLE schools ADD COLUMN type TEXT", []);
     let _ = conn.execute("UPDATE schools SET type='school' WHERE type IS NULL OR type=''", []);
+    // Letterhead fields + document modules (letters, certificates).
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN address TEXT", []);
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN principal_name TEXT", []);
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS letters(id INTEGER PRIMARY KEY AUTOINCREMENT, ref_no TEXT, letter_date TEXT, recipient TEXT, subject TEXT, body TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS certificates(id INTEGER PRIMARY KEY AUTOINCREMENT, serial TEXT, cert_type TEXT, student_id INTEGER, student_name TEXT, title TEXT, body TEXT, issued_date TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_phone TEXT", []);
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_relation TEXT", []);
@@ -6440,20 +6464,26 @@ fn seed_teacher_subjects(conn: &Connection) {
 fn school_get(state: &AppState) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let row = conn.query_row(
-        "SELECT name, academic_year, type FROM schools ORDER BY id LIMIT 1",
+        "SELECT name, academic_year, type, address, principal_name FROM schools ORDER BY id LIMIT 1",
         [],
         |r| {
             Ok((
                 r.get::<_, Option<String>>(0)?,
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, Option<String>>(4)?,
             ))
         },
     );
     match row {
-        Ok((name, ay, typ)) => (
+        Ok((name, ay, typ, address, principal)) => (
             200,
-            json!({"school": {"name": name, "academic_year": ay, "type": typ.unwrap_or_else(|| "school".into())}}),
+            json!({"school": {
+                "name": name, "academic_year": ay,
+                "type": typ.unwrap_or_else(|| "school".into()),
+                "address": address, "principal_name": principal,
+            }}),
         ),
         Err(_) => (200, json!({"school": Value::Null})),
     }
@@ -6464,6 +6494,8 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     let name = v["name"].as_str().unwrap_or("").to_string();
     let ay = v["academic_year"].as_str().unwrap_or("").to_string();
     let typ = v["type"].as_str().unwrap_or("school").to_string();
+    let address = v["address"].as_str().filter(|s| !s.is_empty());
+    let principal = v["principal_name"].as_str().filter(|s| !s.is_empty());
     let conn = state.conn.lock().unwrap();
     let existing: Option<i64> = conn
         .query_row("SELECT id FROM schools ORDER BY id LIMIT 1", [], |r| r.get(0))
@@ -6471,18 +6503,124 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     match existing {
         Some(id) => {
             let _ = conn.execute(
-                "UPDATE schools SET name=?1, academic_year=?2, type=?3 WHERE id=?4",
-                params![name, ay, typ, id],
+                "UPDATE schools SET name=?1, academic_year=?2, type=?3, address=?4, principal_name=?5 WHERE id=?6",
+                params![name, ay, typ, address, principal, id],
             );
         }
         None => {
             let _ = conn.execute(
-                "INSERT INTO schools(name, academic_year, type) VALUES(?1,?2,?3)",
-                params![name, ay, typ],
+                "INSERT INTO schools(name, academic_year, type, address, principal_name) VALUES(?1,?2,?3,?4,?5)",
+                params![name, ay, typ, address, principal],
             );
         }
     }
     (200, json!({"ok": true}))
+}
+
+// ---- Letters & Certificates (document generation) ----
+
+fn next_serial(conn: &Connection, table: &str, prefix: &str) -> String {
+    let n: i64 = conn
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+        .unwrap_or(0);
+    format!("{prefix}-{:04}", n + 1)
+}
+
+fn letters_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, ref_no, letter_date, recipient, subject, body, created_at FROM letters ORDER BY id DESC LIMIT 200",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map([], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "ref_no": r.get::<_, Option<String>>(1)?,
+                "letter_date": r.get::<_, Option<String>>(2)?,
+                "recipient": r.get::<_, Option<String>>(3)?,
+                "subject": r.get::<_, Option<String>>(4)?,
+                "body": r.get::<_, Option<String>>(5)?,
+                "created_at": r.get::<_, Option<String>>(6)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"letters": rows, "total": rows.len()}))
+}
+
+fn letter_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let subject = match v["subject"].as_str().filter(|s| !s.is_empty()) {
+        Some(s) => s.to_string(),
+        None => return (422, json!({"error": "subject required"})),
+    };
+    let recipient = v["recipient"].as_str().unwrap_or("").to_string();
+    let letter_body = v["body"].as_str().unwrap_or("").to_string();
+    let date = v["letter_date"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let conn = state.conn.lock().unwrap();
+    let ref_no = next_serial(&conn, "letters", "LTR");
+    match conn.execute(
+        "INSERT INTO letters(ref_no, letter_date, recipient, subject, body) VALUES(?1, COALESCE(?2, date('now')), ?3, ?4, ?5)",
+        params![ref_no, date, recipient, subject, letter_body],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid(), "ref_no": ref_no})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn certificates_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, serial, cert_type, student_id, student_name, title, body, issued_date, created_at FROM certificates ORDER BY id DESC LIMIT 200",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map([], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "serial": r.get::<_, Option<String>>(1)?,
+                "cert_type": r.get::<_, Option<String>>(2)?,
+                "student_id": r.get::<_, Option<i64>>(3)?,
+                "student_name": r.get::<_, Option<String>>(4)?,
+                "title": r.get::<_, Option<String>>(5)?,
+                "body": r.get::<_, Option<String>>(6)?,
+                "issued_date": r.get::<_, Option<String>>(7)?,
+                "created_at": r.get::<_, Option<String>>(8)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"certificates": rows, "total": rows.len()}))
+}
+
+fn certificate_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let cert_type = match v["cert_type"].as_str().filter(|s| !s.is_empty()) {
+        Some(s) => s.to_string(),
+        None => return (422, json!({"error": "cert_type required"})),
+    };
+    let student_name = match v["student_name"].as_str().filter(|s| !s.is_empty()) {
+        Some(s) => s.to_string(),
+        None => return (422, json!({"error": "student_name required"})),
+    };
+    let student_id = v["student_id"].as_i64();
+    let title = v["title"].as_str().unwrap_or("").to_string();
+    let cert_body = v["body"].as_str().unwrap_or("").to_string();
+    let date = v["issued_date"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let conn = state.conn.lock().unwrap();
+    let serial = next_serial(&conn, "certificates", "CERT");
+    match conn.execute(
+        "INSERT INTO certificates(serial, cert_type, student_id, student_name, title, body, issued_date) VALUES(?1,?2,?3,?4,?5,?6, COALESCE(?7, date('now')))",
+        params![serial, cert_type, student_id, student_name, title, cert_body, date],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid(), "serial": serial})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
 }
 
 // ---- floor plan (canvas layout persisted as JSON) ----

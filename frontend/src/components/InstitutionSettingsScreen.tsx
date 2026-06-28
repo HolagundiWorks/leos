@@ -8,6 +8,7 @@ import {
   Select,
   Stack,
   Text,
+  Textarea,
   TextInput,
   Title,
 } from '@mantine/core';
@@ -26,6 +27,8 @@ export function InstitutionSettingsScreen() {
   const [name, setName] = useState('');
   const [type, setType] = useState('school');
   const [ay, setAy] = useState('');
+  const [address, setAddress] = useState('');
+  const [principal, setPrincipal] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   useEffect(() => {
@@ -33,6 +36,8 @@ export function InstitutionSettingsScreen() {
       setName(data.name ?? '');
       setType(data.type ?? 'school');
       setAy(data.academic_year ?? '');
+      setAddress(data.address ?? '');
+      setPrincipal(data.principal_name ?? '');
     }
   }, [data]);
 
@@ -41,7 +46,7 @@ export function InstitutionSettingsScreen() {
   const save = async () => {
     setStatus('saving');
     try {
-      await saveSchool(token, { name, academic_year: ay, type });
+      await saveSchool(token, { name, academic_year: ay, type, address, principal_name: principal });
       await qc.invalidateQueries({ queryKey: ['school'] });
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 1800);
@@ -79,6 +84,22 @@ export function InstitutionSettingsScreen() {
               placeholder="2026-27"
               value={ay}
               onChange={(e) => setAy(e.currentTarget.value)}
+            />
+            <Textarea
+              label="Address"
+              description="Shown on the letterhead and certificates."
+              placeholder="12 Lake Road, Bengaluru 560001"
+              value={address}
+              onChange={(e) => setAddress(e.currentTarget.value)}
+              autosize
+              minRows={2}
+            />
+            <TextInput
+              label="Principal's name"
+              description="Signs letters and certificates."
+              placeholder="Dr. A. Rao"
+              value={principal}
+              onChange={(e) => setPrincipal(e.currentTarget.value)}
             />
 
             <div>

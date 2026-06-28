@@ -46,6 +46,8 @@ import {
   AlarmClock,
   PackageCheck,
   Server,
+  Mail,
+  Award,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -260,6 +262,8 @@ export const ribbonTabs: RibbonTab[] = [
         id: 'event-docs',
         label: 'Documents',
         actions: [
+          { key: 'certificates', label: 'Certificates', icon: Award, accessLevel: 2 },
+          { key: 'letters', label: 'Letters', icon: Mail, accessLevel: 2 },
           { key: 'parent-guide', label: 'Parent Guide', icon: FileText, accessLevel: 2 },
           { key: 'itinerary', label: 'Itinerary', icon: PenLine, accessLevel: 2 },
         ],

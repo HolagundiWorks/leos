@@ -282,6 +282,8 @@ export interface School {
   name: string | null;
   academic_year: string | null;
   type: string | null;
+  address?: string | null;
+  principal_name?: string | null;
 }
 export async function fetchSchool(token: string): Promise<School | null> {
   const res = await req<{ school: School | null }>('/school', { token });
@@ -289,9 +291,57 @@ export async function fetchSchool(token: string): Promise<School | null> {
 }
 export function saveSchool(
   token: string,
-  data: { name: string; academic_year: string; type: string },
+  data: { name: string; academic_year: string; type: string; address?: string; principal_name?: string },
 ) {
   return req<{ ok: boolean }>('/school', { method: 'POST', token, body: data });
+}
+
+// ─── Letters & Certificates (document generation) ───────────────────────────
+export interface Letter {
+  id: number;
+  ref_no: string | null;
+  letter_date: string | null;
+  recipient: string | null;
+  subject: string | null;
+  body: string | null;
+  created_at: string | null;
+}
+export function fetchLetters(token: string) {
+  return req<{ letters: Letter[]; total: number }>('/letters', { token });
+}
+export function createLetter(
+  token: string,
+  data: { recipient?: string; subject: string; body: string; letter_date?: string },
+) {
+  return req<{ ok: boolean; id: number; ref_no: string }>('/letters', { method: 'POST', token, body: data });
+}
+
+export interface Certificate {
+  id: number;
+  serial: string | null;
+  cert_type: string | null;
+  student_id: number | null;
+  student_name: string | null;
+  title: string | null;
+  body: string | null;
+  issued_date: string | null;
+  created_at: string | null;
+}
+export function fetchCertificates(token: string) {
+  return req<{ certificates: Certificate[]; total: number }>('/certificates', { token });
+}
+export function createCertificate(
+  token: string,
+  data: {
+    cert_type: string;
+    student_name: string;
+    student_id?: number | null;
+    title?: string;
+    body?: string;
+    issued_date?: string;
+  },
+) {
+  return req<{ ok: boolean; id: number; serial: string }>('/certificates', { method: 'POST', token, body: data });
 }
 
 export interface Section {
