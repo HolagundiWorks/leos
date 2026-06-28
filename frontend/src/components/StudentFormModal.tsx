@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
+  Alert,
   Button,
   Checkbox,
   Divider,
@@ -14,9 +15,9 @@ import {
   Textarea,
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { BadgeCheck, GraduationCap, HeartPulse, Users } from 'lucide-react';
+import { BadgeCheck, GraduationCap, HeartPulse, Lock, Users } from 'lucide-react';
 import type { StudentDetail, StudentFormData } from '../api/client';
-import { createStudent, updateStudent } from '../api/client';
+import { ApiError, createStudent, updateStudent } from '../api/client';
 import { useAuth } from '../stores/auth';
 import { ImageUpload } from './ImageUpload';
 
@@ -46,6 +47,9 @@ export function StudentFormModal({ onClose, initial }: Props) {
       : ({ enrolled: false, status: 'Active', nationality: 'Indian', verification_status: 'Pending' }),
   );
   const up = (k: string, v: string | boolean | null) => setF((s) => ({ ...s, [k]: v }));
+  // When editing a Locked record, a CBSE-locked field edit returns 423; we then
+  // reveal an override-reason field and retry with override=true.
+  const [override, setOverride] = useState<string | null>(null);
 
   // Plain helpers (return elements, not components → no focus loss on re-render).
   const txt = (label: string, key: string, o?: { placeholder?: string; type?: string }): ReactNode => (
@@ -64,6 +68,7 @@ export function StudentFormModal({ onClose, initial }: Props) {
     out.first_name = (f.first_name as string) ?? '';
     out.last_name = (f.last_name as string) ?? '';
     out.enrolled = !!f.enrolled;
+    if (override !== null) { out.override = true; out.reason = override; }
     return out as unknown as StudentFormData;
   };
 
@@ -72,7 +77,11 @@ export function StudentFormModal({ onClose, initial }: Props) {
     if (isEdit && initial) qc.invalidateQueries({ queryKey: ['student', initial.id] });
   };
   const create = useMutation({ mutationFn: () => createStudent(token, payload()), onSuccess: () => { invalidate(); onClose(); } });
-  const update = useMutation({ mutationFn: () => updateStudent(token, initial!.id, payload()), onSuccess: () => { invalidate(); onClose(); } });
+  const update = useMutation({
+    mutationFn: () => updateStudent(token, initial!.id, payload()),
+    onSuccess: () => { invalidate(); onClose(); },
+    onError: (e) => { if (e instanceof ApiError && e.status === 423 && override === null) setOverride(''); },
+  });
   const save = () => (isEdit ? update.mutate() : create.mutate());
   const busy = create.isPending || update.isPending;
   const canSave = ((f.first_name as string) ?? '').trim() !== '' && ((f.last_name as string) ?? '').trim() !== '';
@@ -115,6 +124,7 @@ export function StudentFormModal({ onClose, initial }: Props) {
               {txt('Nationality', 'nationality')}
               {txt('Religion', 'religion')}
               {txt('Mother tongue', 'mother_tongue')}
+              {sel('CWSN status', 'cwsn', ['No', 'Yes'])}
               {txt('Email', 'email', { type: 'email' })}
               {txt('Mobile', 'phone')}
             </SimpleGrid>
@@ -188,13 +198,25 @@ export function StudentFormModal({ onClose, initial }: Props) {
         </Tabs.Panel>
       </Tabs>
 
+      {override !== null && (
+        <Alert color="orange" variant="light" icon={<Lock size={16} />} mt="md" title="This record is CBSE-locked">
+          <Text size="sm" mb="xs">Editing a locked field (name, parents, DOB, gender, category, CWSN) requires a documented reason. The override is recorded in the audit trail.</Text>
+          <TextInput placeholder="e.g. CBSE correction approval ref. #…" value={override} onChange={(e) => setOverride(e.currentTarget.value)} data-testid="override-reason" />
+        </Alert>
+      )}
       <Group justify="flex-end" mt="md">
         <Button variant="subtle" onClick={onClose} data-testid="student-form-cancel-button">Cancel</Button>
-        <Button onClick={save} loading={busy} disabled={!canSave} data-testid="student-form-save-button">
-          {isEdit ? 'Save changes' : 'Admit student'}
-        </Button>
+        {override !== null ? (
+          <Button color="orange" leftSection={<Lock size={14} />} onClick={save} loading={busy} disabled={!override.trim()} data-testid="student-form-override-button">
+            Override &amp; save
+          </Button>
+        ) : (
+          <Button onClick={save} loading={busy} disabled={!canSave} data-testid="student-form-save-button">
+            {isEdit ? 'Save changes' : 'Admit student'}
+          </Button>
+        )}
       </Group>
-      {(create.isError || update.isError) && (
+      {(create.isError || (update.isError && override === null)) && (
         <Text size="xs" c="red" ta="center" mt="xs">
           {(create.error as Error)?.message ?? (update.error as Error)?.message ?? 'Save failed'}
         </Text>

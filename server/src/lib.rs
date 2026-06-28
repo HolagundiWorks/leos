@@ -183,6 +183,19 @@ fn dispatch(
             return with_auth(state, token, |_| student_analytics(state, id));
         }
     }
+    if method == &Method::Get && path.starts_with("/students/") && path.ends_with("/audit") {
+        let id_str = &path["/students/".len()..path.len() - "/audit".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| student_audit(state, id));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/students/") && path.ends_with("/advance-lock") {
+        let id_str = &path["/students/".len()..path.len() - "/advance-lock".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            // Advancing the lock lifecycle is a Principal/Admin (L1) action.
+            return require_level(state, token, 1, |uid| student_advance_lock(state, id, body, uid));
+        }
+    }
     if method == &Method::Get && path.starts_with("/students/") {
         if let Ok(id) = path["/students/".len()..].parse::<i64>() {
             return with_auth(state, token, |_| student_detail(state, id));
@@ -191,7 +204,7 @@ fn dispatch(
     if method == &Method::Post && path.starts_with("/students/") && path.ends_with("/update") {
         let id_str = &path["/students/".len()..path.len() - "/update".len()];
         if let Ok(id) = id_str.parse::<i64>() {
-            return with_auth(state, token, |_| student_update(state, id, body));
+            return with_auth(state, token, |uid| student_update(state, id, body, uid));
         }
     }
     if method == &Method::Get && path == "/staff" {
@@ -439,12 +452,12 @@ fn dispatch(
         return with_auth(state, token, |_| student_marks_list(state, url));
     }
     if method == &Method::Post && path == "/student-marks" {
-        return with_auth(state, token, |_| student_mark_add(state, body));
+        return with_auth(state, token, |uid| student_mark_add(state, body, uid));
     }
     if method == &Method::Post && path.starts_with("/student-marks/") && path.ends_with("/delete") {
         let id_str = &path["/student-marks/".len()..path.len() - "/delete".len()];
         if let Ok(id) = id_str.parse::<i64>() {
-            return with_auth(state, token, |_| student_mark_delete(state, id));
+            return with_auth(state, token, |uid| student_mark_delete(state, id, uid));
         }
     }
     // Board-exam registration.
@@ -1206,7 +1219,7 @@ const STUDENT_COLS: &[&str] = &[
     "guardian_name", "guardian_phone", "guardian_relation", "guardian_email", "guardian_aadhaar", "address",
     "father_name", "father_occupation", "father_employer", "father_income", "father_phone", "father_email", "father_aadhaar",
     "mother_name", "mother_occupation", "mother_employer", "mother_income", "mother_phone", "mother_email", "mother_aadhaar",
-    "blood_group", "nationality", "religion", "category", "mother_tongue", "aadhaar", "apaar_id", "pen",
+    "blood_group", "nationality", "religion", "category", "cwsn", "mother_tongue", "aadhaar", "apaar_id", "pen",
     "permanent_address", "photo", "emergency_contact", "medical_notes", "card_uid",
     "admission_date", "admission_class", "previous_school", "previous_board", "tc_number", "migration_number", "verification_status",
     "status",
@@ -1236,7 +1249,25 @@ fn student_create(state: &AppState, body: &str) -> (u16, Value) {
     }
 }
 
-fn student_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+// CBSE-locked identity fields: once the record is Locked these reject edits
+// unless an explicit override + reason is supplied (which is itself audited).
+const LOCKED_FIELDS: &[&str] = &[
+    "first_name", "middle_name", "last_name", "father_name", "mother_name",
+    "birthdate", "gender", "category", "cwsn",
+];
+
+// Normalise an incoming JSON value to the string form we store/compare against.
+fn field_str(v: &Value) -> Option<String> {
+    match v {
+        Value::Null => None,
+        Value::Bool(b) => Some(if *b { "1".into() } else { "0".into() }),
+        Value::String(s) if s.is_empty() => None,
+        Value::String(s) => Some(s.clone()),
+        other => Some(other.to_string()),
+    }
+}
+
+fn student_update(state: &AppState, id: i64, body: &str, actor: i64) -> (u16, Value) {
     let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
     // Partial-safe: only touch columns actually present in the body (a missing
     // key is left unchanged; an explicit "" clears the field).
@@ -1244,15 +1275,132 @@ fn student_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
     if cols.is_empty() {
         return (200, json!({"ok": true}));
     }
+    let conn = state.conn.lock().unwrap();
+
+    // Read current lock_state + current values of the touched columns (for the
+    // audit diff and the lock check).
+    let sel = format!("SELECT lock_state, {} FROM students WHERE id=?1", cols.join(", "));
+    let current = conn
+        .query_row(&sel, params![id], |r| {
+            let lock: Option<String> = r.get(0)?;
+            let mut old: Vec<Option<String>> = Vec::with_capacity(cols.len());
+            for i in 0..cols.len() {
+                // Type-agnostic read (columns are a mix of TEXT and INTEGER, e.g. enrolled).
+                let val: rusqlite::types::Value = r.get(i + 1)?;
+                old.push(match val {
+                    rusqlite::types::Value::Null => None,
+                    rusqlite::types::Value::Integer(n) => Some(n.to_string()),
+                    rusqlite::types::Value::Real(f) => Some(f.to_string()),
+                    rusqlite::types::Value::Text(t) => Some(t),
+                    rusqlite::types::Value::Blob(_) => None,
+                });
+            }
+            Ok((lock.unwrap_or_else(|| "Draft".into()), old))
+        })
+        .ok();
+    let (lock_state, old_vals) = match current {
+        Some(x) => x,
+        None => return (404, json!({"error": "student not found"})),
+    };
+
+    // Diff: which touched fields actually change value.
+    let changes: Vec<(&str, Option<String>, Option<String>)> = cols
+        .iter()
+        .enumerate()
+        .filter_map(|(i, c)| {
+            let old = old_vals[i].clone().filter(|s| !s.is_empty());
+            let neu = field_str(&v[*c]);
+            if old != neu { Some((*c, old, neu)) } else { None }
+        })
+        .collect();
+
+    // Lock enforcement.
+    let locked = lock_state == "Locked";
+    let overridden = v["override"].as_bool().unwrap_or(false);
+    let reason = v["reason"].as_str().filter(|s| !s.is_empty());
+    if locked {
+        let blocked: Vec<&str> = changes.iter().map(|(c, _, _)| *c).filter(|c| LOCKED_FIELDS.contains(c)).collect();
+        if !blocked.is_empty() && !(overridden && reason.is_some()) {
+            return (423, json!({
+                "error": "record is locked; CBSE-locked fields require an override with a reason",
+                "locked_fields": blocked,
+            }));
+        }
+    }
+
     let set: String = cols.iter().enumerate().map(|(i, c)| format!("{c}=?{}", i + 1)).collect::<Vec<_>>().join(", ");
     let mut vals: Vec<rusqlite::types::Value> = cols.iter().map(|c| json_to_sqlite(&v[*c], c)).collect();
     vals.push(rusqlite::types::Value::Integer(id));
-    let conn = state.conn.lock().unwrap();
     match conn.execute(&format!("UPDATE students SET {set} WHERE id=?{}", cols.len() + 1), rusqlite::params_from_iter(vals)) {
         Ok(0) => (404, json!({"error": "student not found"})),
-        Ok(_) => (200, json!({"ok": true})),
+        Ok(_) => {
+            // Audit every changed field (old → new, who, when, reason).
+            for (c, old, neu) in &changes {
+                let is_locked_field = LOCKED_FIELDS.contains(c);
+                let action = if locked && is_locked_field { "student.locked_override" } else { "student.update" };
+                let detail = json!({"field": c, "old": old, "new": neu, "reason": reason}).to_string();
+                audit_write(&conn, actor, action, "student", Some(id), Some(&detail));
+            }
+            (200, json!({"ok": true, "changed": changes.len()}))
+        }
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// Advance the CBSE record-lock lifecycle one step (or to an explicit `to`),
+// writing an audit entry for the transition.
+fn student_advance_lock(state: &AppState, id: i64, body: &str, actor: i64) -> (u16, Value) {
+    const STAGES: &[&str] = &["Draft", "Parent Verified", "Principal Verified", "Submitted", "Locked"];
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    let cur: Option<String> = conn
+        .query_row("SELECT lock_state FROM students WHERE id=?1", params![id], |r| r.get::<_, Option<String>>(0))
+        .ok()
+        .flatten();
+    let cur = match cur {
+        Some(s) if !s.is_empty() => s,
+        Some(_) => "Draft".to_string(),
+        None => return (404, json!({"error": "student not found"})),
+    };
+    let target = match v["to"].as_str().filter(|s| STAGES.contains(s)) {
+        Some(t) => t.to_string(),
+        None => {
+            let idx = STAGES.iter().position(|s| *s == cur).unwrap_or(0);
+            STAGES[(idx + 1).min(STAGES.len() - 1)].to_string()
+        }
+    };
+    let _ = conn.execute("UPDATE students SET lock_state=?1 WHERE id=?2", params![target, id]);
+    let detail = json!({"field": "lock_state", "old": cur, "new": target, "reason": v["reason"].as_str()}).to_string();
+    audit_write(&conn, actor, "student.lock", "student", Some(id), Some(&detail));
+    (200, json!({"ok": true, "lock_state": target}))
+}
+
+// Per-record compliance history (who changed what, when).
+fn student_audit(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT al.id, u.username, al.action, al.detail, al.created_at FROM audit_log al
+         LEFT JOIN users u ON u.id = al.user_id
+         WHERE al.resource_type='student' AND al.resource_id=?1 ORDER BY al.id DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map(params![id], |r| {
+            let detail: Option<String> = r.get(3)?;
+            let parsed = detail.as_deref().and_then(|d| serde_json::from_str::<Value>(d).ok());
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "username": r.get::<_, Option<String>>(1)?,
+                "action": r.get::<_, String>(2)?,
+                "detail": parsed,
+                "created_at": r.get::<_, String>(4)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"history": rows, "total": rows.len()}))
 }
 
 fn student_by_card(state: &AppState, url: &str) -> (u16, Value) {
@@ -1271,8 +1419,11 @@ fn student_by_card(state: &AppState, url: &str) -> (u16, Value) {
 
 fn student_detail(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
-    let collist: String =
-        std::iter::once("id").chain(STUDENT_COLS.iter().copied()).collect::<Vec<_>>().join(", ");
+    let collist: String = std::iter::once("id")
+        .chain(STUDENT_COLS.iter().copied())
+        .chain(std::iter::once("lock_state"))
+        .collect::<Vec<_>>()
+        .join(", ");
     let r = conn.query_row(&format!("SELECT {collist} FROM students WHERE id = ?1"), params![id], |row| {
         let mut obj = serde_json::Map::new();
         obj.insert("id".into(), json!(row.get::<_, i64>(0)?));
@@ -1285,6 +1436,8 @@ fn student_detail(state: &AppState, id: i64) -> (u16, Value) {
                 obj.insert((*c).into(), sqlite_to_json(val));
             }
         }
+        let lock: rusqlite::types::Value = row.get(STUDENT_COLS.len() + 1)?;
+        obj.insert("lock_state".into(), sqlite_to_json(lock));
         Ok(Value::Object(obj))
     });
     match r {
@@ -1847,6 +2000,9 @@ fn migrate_schema(conn: &Connection) {
         let _ = conn.execute(&format!("ALTER TABLE students ADD COLUMN {col} TEXT"), []);
     }
     let _ = conn.execute("ALTER TABLE students ADD COLUMN status TEXT DEFAULT 'Active'", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN cwsn TEXT", []);
+    // CBSE record-lock lifecycle: Draft → Parent Verified → Principal Verified → Submitted → Locked.
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN lock_state TEXT DEFAULT 'Draft'", []);
     let _ = conn.execute("ALTER TABLE users ADD COLUMN role_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 3", []);
 }
@@ -7253,7 +7409,7 @@ fn student_marks_list(state: &AppState, url: &str) -> (u16, Value) {
     (200, json!({"marks": rows, "total": rows.len()}))
 }
 
-fn student_mark_add(state: &AppState, body: &str) -> (u16, Value) {
+fn student_mark_add(state: &AppState, body: &str, actor: i64) -> (u16, Value) {
     let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
     let student_id = match v["student_id"].as_i64() {
         Some(x) => x,
@@ -7272,14 +7428,31 @@ fn student_mark_add(state: &AppState, body: &str) -> (u16, Value) {
             v["remarks"].as_str().filter(|s| !s.is_empty()),
         ],
     ) {
-        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Ok(_) => {
+            // Marks changes are audited against the student record (no silent edits).
+            let detail = json!({"term": v["term"], "subject": v["subject"], "marks": v["marks"], "max_marks": v["max_marks"], "grade": v["grade"]}).to_string();
+            audit_write(&conn, actor, "mark.add", "student", Some(student_id), Some(&detail));
+            (201, json!({"ok": true, "id": conn.last_insert_rowid()}))
+        }
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
 }
 
-fn student_mark_delete(state: &AppState, id: i64) -> (u16, Value) {
+fn student_mark_delete(state: &AppState, id: i64, actor: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
+    // Capture what is being removed so the audit trail is meaningful.
+    let row = conn
+        .query_row(
+            "SELECT student_id, term, subject, marks FROM student_marks WHERE id=?1",
+            params![id],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, Option<f64>>(3)?)),
+        )
+        .ok();
     let _ = conn.execute("DELETE FROM student_marks WHERE id=?1", params![id]);
+    if let Some((student_id, term, subject, marks)) = row {
+        let detail = json!({"term": term, "subject": subject, "marks": marks}).to_string();
+        audit_write(&conn, actor, "mark.delete", "student", Some(student_id), Some(&detail));
+    }
     (200, json!({"ok": true}))
 }
 

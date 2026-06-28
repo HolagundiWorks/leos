@@ -161,6 +161,8 @@ export interface StudentDetail extends Student {
   migration_number: string | null;
   verification_status: string | null;
   status: string | null;
+  cwsn: string | null;
+  lock_state: string | null;
 }
 
 export interface StudentFormData {
@@ -213,6 +215,10 @@ export interface StudentFormData {
   migration_number?: string;
   verification_status?: string;
   status?: string;
+  cwsn?: string;
+  // Override path for editing CBSE-locked fields on a Locked record.
+  override?: boolean;
+  reason?: string;
 }
 
 export function createStudent(token: string, data: StudentFormData) {
@@ -664,6 +670,22 @@ export interface StudentAnalytics {
 }
 export function fetchStudentAnalytics(token: string, studentId: number) {
   return req<StudentAnalytics>(`/students/${studentId}/analytics`, { token });
+}
+
+// ─── Record-lock workflow + audit trail ─────────────────────────────────────
+export const LOCK_STAGES = ['Draft', 'Parent Verified', 'Principal Verified', 'Submitted', 'Locked'] as const;
+export interface AuditEntry {
+  id: number;
+  username: string | null;
+  action: string;
+  detail: { field?: string; old?: string | null; new?: string | null; reason?: string | null } | null;
+  created_at: string;
+}
+export function advanceLock(token: string, studentId: number, opts: { to?: string; reason?: string } = {}) {
+  return req<{ ok: boolean; lock_state: string }>(`/students/${studentId}/advance-lock`, { method: 'POST', token, body: opts });
+}
+export function fetchStudentAudit(token: string, studentId: number) {
+  return req<{ history: AuditEntry[]; total: number }>(`/students/${studentId}/audit`, { token });
 }
 
 export interface Section {
