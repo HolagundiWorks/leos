@@ -94,7 +94,16 @@ export function App() {
       studentId != null ? (
         <StudentProfileScreen id={studentId} onBack={() => setStudentId(null)} />
       ) : (
-        <StudentsScreen />
+        <StudentsScreen key="students" onView={setStudentId} />
+      );
+  } else if (active === 'admissions') {
+    // Admissions = admit a new student; opens the Students list with the
+    // admit form already open. Viewing a student still drills into the profile.
+    screen =
+      studentId != null ? (
+        <StudentProfileScreen id={studentId} onBack={() => setStudentId(null)} />
+      ) : (
+        <StudentsScreen key="admissions" openAdmit onView={setStudentId} />
       );
   } else if (active === 'staff') {
     screen = <StaffScreen />;

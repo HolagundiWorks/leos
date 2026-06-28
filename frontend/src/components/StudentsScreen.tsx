@@ -74,12 +74,24 @@ function StudentRow({
   );
 }
 
-export function StudentsScreen() {
+export function StudentsScreen({
+  onView,
+  openAdmit = false,
+}: {
+  onView?: (id: number) => void;
+  openAdmit?: boolean;
+} = {}) {
   const [q, setQ] = useState('');
-  const [admitting, setAdmitting] = useState(false);
+  const [admitting, setAdmitting] = useState(openAdmit);
   const { data, isLoading } = useStudents(q);
   const selected = useSelection((s) => s.student);
   const selectStudent = useSelection((s) => s.selectStudent);
+
+  // Clicking a student opens their profile (which has Edit / Print ID / etc.).
+  const openStudent = (id: number, name: string) => {
+    selectStudent(id, name);
+    onView?.(id);
+  };
 
   return (
     <Container size="xl" px={0}>
@@ -117,7 +129,7 @@ export function StudentsScreen() {
                 key={s.id}
                 s={s}
                 selected={selected?.id === s.id}
-                onSelect={selectStudent}
+                onSelect={openStudent}
               />
             ))
           ) : (
