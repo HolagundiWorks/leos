@@ -373,6 +373,37 @@ fn dispatch(
             return with_auth(state, token, |_| sports_result_delete(state, id));
         }
     }
+    // Clubs OS: clubs + members.
+    if method == &Method::Get && path == "/clubs" {
+        return with_auth(state, token, |_| clubs_list(state));
+    }
+    if method == &Method::Post && path == "/clubs" {
+        return with_auth(state, token, |_| club_save(state, None, body));
+    }
+    if method == &Method::Post && path.starts_with("/clubs/") && path.ends_with("/update") {
+        let id_str = &path["/clubs/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| club_save(state, Some(id), body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/clubs/") && path.ends_with("/delete") {
+        let id_str = &path["/clubs/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| club_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/club-members" {
+        return with_auth(state, token, |_| club_members_list(state, url));
+    }
+    if method == &Method::Post && path == "/club-members" {
+        return with_auth(state, token, |_| club_member_add(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/club-members/") && path.ends_with("/delete") {
+        let id_str = &path["/club-members/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| club_member_remove(state, id));
+        }
+    }
     if method == &Method::Get && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_get(state));
     }
@@ -1099,8 +1130,9 @@ fn student_create(state: &AppState, body: &str) -> (u16, Value) {
     };
     let conn = state.conn.lock().unwrap();
     match conn.execute(
-        "INSERT INTO students(first_name, middle_name, last_name, email, phone, gender, birthdate, alt_id, enrolled, guardian_name, guardian_phone, guardian_relation, address)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+        "INSERT INTO students(first_name, middle_name, last_name, email, phone, gender, birthdate, alt_id, enrolled, guardian_name, guardian_phone, guardian_relation, address,
+         father_name, mother_name, blood_group, admission_date, nationality, category, emergency_contact, medical_notes)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21)",
         params![
             first,
             v["middle_name"].as_str().filter(|s| !s.is_empty()),
@@ -1115,6 +1147,14 @@ fn student_create(state: &AppState, body: &str) -> (u16, Value) {
             v["guardian_phone"].as_str().filter(|s| !s.is_empty()),
             v["guardian_relation"].as_str().filter(|s| !s.is_empty()),
             v["address"].as_str().filter(|s| !s.is_empty()),
+            v["father_name"].as_str().filter(|s| !s.is_empty()),
+            v["mother_name"].as_str().filter(|s| !s.is_empty()),
+            v["blood_group"].as_str().filter(|s| !s.is_empty()),
+            v["admission_date"].as_str().filter(|s| !s.is_empty()),
+            v["nationality"].as_str().filter(|s| !s.is_empty()),
+            v["category"].as_str().filter(|s| !s.is_empty()),
+            v["emergency_contact"].as_str().filter(|s| !s.is_empty()),
+            v["medical_notes"].as_str().filter(|s| !s.is_empty()),
         ],
     ) {
         Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
@@ -1128,8 +1168,9 @@ fn student_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
     match conn.execute(
         "UPDATE students SET first_name=COALESCE(?1,first_name), middle_name=?2, last_name=COALESCE(?3,last_name),
          email=?4, phone=?5, gender=?6, birthdate=?7, alt_id=?8, enrolled=COALESCE(?9,enrolled),
-         guardian_name=?10, guardian_phone=?11, guardian_relation=?12, address=?13, card_uid=COALESCE(?15,card_uid)
-         WHERE id=?14",
+         guardian_name=?10, guardian_phone=?11, guardian_relation=?12, address=?13, card_uid=COALESCE(?14,card_uid),
+         father_name=?15, mother_name=?16, blood_group=?17, admission_date=?18, nationality=?19, category=?20, emergency_contact=?21, medical_notes=?22
+         WHERE id=?23",
         params![
             v["first_name"].as_str().filter(|s| !s.is_empty()),
             v["middle_name"].as_str().map(str::to_string),
@@ -1144,8 +1185,16 @@ fn student_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
             v["guardian_phone"].as_str().map(str::to_string),
             v["guardian_relation"].as_str().map(str::to_string),
             v["address"].as_str().map(str::to_string),
-            id,
             v["card_uid"].as_str().filter(|s| !s.is_empty()),
+            v["father_name"].as_str().map(str::to_string),
+            v["mother_name"].as_str().map(str::to_string),
+            v["blood_group"].as_str().map(str::to_string),
+            v["admission_date"].as_str().map(str::to_string),
+            v["nationality"].as_str().map(str::to_string),
+            v["category"].as_str().map(str::to_string),
+            v["emergency_contact"].as_str().map(str::to_string),
+            v["medical_notes"].as_str().map(str::to_string),
+            id,
         ],
     ) {
         Ok(0) => (404, json!({"error": "student not found"})),
@@ -1172,7 +1221,8 @@ fn student_detail(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let r = conn.query_row(
         "SELECT id, first_name, middle_name, last_name, email, phone, gender, birthdate, alt_id, enrolled,
-                guardian_name, guardian_phone, guardian_relation, address
+                guardian_name, guardian_phone, guardian_relation, address,
+                father_name, mother_name, blood_group, admission_date, nationality, category, emergency_contact, medical_notes
          FROM students WHERE id = ?1",
         params![id],
         |r| {
@@ -1191,6 +1241,14 @@ fn student_detail(state: &AppState, id: i64) -> (u16, Value) {
                 "guardian_phone": r.get::<_, Option<String>>(11)?,
                 "guardian_relation": r.get::<_, Option<String>>(12)?,
                 "address": r.get::<_, Option<String>>(13)?,
+                "father_name": r.get::<_, Option<String>>(14)?,
+                "mother_name": r.get::<_, Option<String>>(15)?,
+                "blood_group": r.get::<_, Option<String>>(16)?,
+                "admission_date": r.get::<_, Option<String>>(17)?,
+                "nationality": r.get::<_, Option<String>>(18)?,
+                "category": r.get::<_, Option<String>>(19)?,
+                "emergency_contact": r.get::<_, Option<String>>(20)?,
+                "medical_notes": r.get::<_, Option<String>>(21)?,
             }))
         },
     );
@@ -1691,6 +1749,15 @@ fn migrate_schema(conn: &Connection) {
         "CREATE TABLE IF NOT EXISTS sports_results(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER, participant TEXT, house TEXT, position INTEGER, points INTEGER DEFAULT 0, note TEXT, created_at TEXT DEFAULT (datetime('now')))",
         [],
     );
+    // Clubs: club records (with a base64 logo) + member roster.
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS clubs(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, description TEXT, logo TEXT, lead_staff TEXT, meeting_day TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS club_members(id INTEGER PRIMARY KEY AUTOINCREMENT, club_id INTEGER, student_id INTEGER, student_name TEXT, role TEXT, joined_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_phone TEXT", []);
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_relation TEXT", []);
@@ -1700,6 +1767,15 @@ fn migrate_schema(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN employee_id TEXT", []);
     let _ = conn.execute("ALTER TABLE staff ADD COLUMN department_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE students ADD COLUMN card_uid TEXT", []);
+    // Richer student profile fields.
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN father_name TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN mother_name TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN blood_group TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN admission_date TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN nationality TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN category TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN emergency_contact TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN medical_notes TEXT", []);
     let _ = conn.execute("ALTER TABLE users ADD COLUMN role_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 3", []);
 }
@@ -6831,6 +6907,126 @@ fn sports_leaderboard(state: &AppState) -> (u16, Value) {
         })
         .unwrap_or_default();
     (200, json!({"houses": houses, "participants": participants}))
+}
+
+// ---- Clubs OS: clubs + member roster ----
+
+fn clubs_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT c.id, c.name, c.description, c.logo, c.lead_staff, c.meeting_day,
+                (SELECT COUNT(*) FROM club_members m WHERE m.club_id = c.id)
+         FROM clubs c ORDER BY c.name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map([], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "name": r.get::<_, Option<String>>(1)?,
+                "description": r.get::<_, Option<String>>(2)?,
+                "logo": r.get::<_, Option<String>>(3)?,
+                "lead_staff": r.get::<_, Option<String>>(4)?,
+                "meeting_day": r.get::<_, Option<String>>(5)?,
+                "member_count": r.get::<_, i64>(6)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"clubs": rows, "total": rows.len()}))
+}
+
+fn club_save(state: &AppState, id: Option<i64>, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "name required"})),
+    };
+    let desc = v["description"].as_str().filter(|s| !s.is_empty());
+    let logo = v["logo"].as_str().filter(|s| !s.is_empty());
+    let lead = v["lead_staff"].as_str().filter(|s| !s.is_empty());
+    let day = v["meeting_day"].as_str().filter(|s| !s.is_empty());
+    let conn = state.conn.lock().unwrap();
+    match id {
+        Some(cid) => {
+            match conn.execute(
+                "UPDATE clubs SET name=?1, description=?2, logo=?3, lead_staff=?4, meeting_day=?5 WHERE id=?6",
+                params![name, desc, logo, lead, day, cid],
+            ) {
+                Ok(0) => (404, json!({"error": "club not found"})),
+                Ok(_) => (200, json!({"ok": true, "id": cid})),
+                Err(e) => (500, json!({"error": format!("{e}")})),
+            }
+        }
+        None => match conn.execute(
+            "INSERT INTO clubs(name, description, logo, lead_staff, meeting_day) VALUES(?1,?2,?3,?4,?5)",
+            params![name, desc, logo, lead, day],
+        ) {
+            Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+            Err(e) => (500, json!({"error": format!("{e}")})),
+        },
+    }
+}
+
+fn club_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM club_members WHERE club_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM clubs WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn club_members_list(state: &AppState, url: &str) -> (u16, Value) {
+    let club_id: i64 = match q_param(url, "club_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "club_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, student_id, student_name, role FROM club_members WHERE club_id=?1 ORDER BY student_name",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map(params![club_id], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "student_id": r.get::<_, Option<i64>>(1)?,
+                "student_name": r.get::<_, Option<String>>(2)?,
+                "role": r.get::<_, Option<String>>(3)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"members": rows, "total": rows.len()}))
+}
+
+fn club_member_add(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let club_id = match v["club_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "club_id required"})),
+    };
+    let student_name = match v["student_name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "student_name required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO club_members(club_id, student_id, student_name, role) VALUES(?1,?2,?3,?4)",
+        params![club_id, v["student_id"].as_i64(), student_name, v["role"].as_str().filter(|s| !s.is_empty()).unwrap_or("Member")],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn club_member_remove(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM club_members WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
 }
 
 // ---- floor plan (canvas layout persisted as JSON) ----

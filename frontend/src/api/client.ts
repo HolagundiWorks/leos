@@ -124,6 +124,14 @@ export interface StudentDetail extends Student {
   guardian_phone: string | null;
   guardian_relation: string | null;
   address: string | null;
+  father_name: string | null;
+  mother_name: string | null;
+  blood_group: string | null;
+  admission_date: string | null;
+  nationality: string | null;
+  category: string | null;
+  emergency_contact: string | null;
+  medical_notes: string | null;
 }
 
 export interface StudentFormData {
@@ -140,6 +148,14 @@ export interface StudentFormData {
   guardian_phone?: string;
   guardian_relation?: string;
   address?: string;
+  father_name?: string;
+  mother_name?: string;
+  blood_group?: string;
+  admission_date?: string;
+  nationality?: string;
+  category?: string;
+  emergency_contact?: string;
+  medical_notes?: string;
 }
 
 export function createStudent(token: string, data: StudentFormData) {
@@ -402,6 +418,71 @@ export function deleteSportsResult(token: string, id: number) {
 }
 export function fetchLeaderboard(token: string) {
   return req<{ houses: LeaderRow[]; participants: LeaderRow[] }>('/sports/leaderboard', { token });
+}
+
+// ─── Clubs OS: clubs + member roster ────────────────────────────────────────
+export interface Club {
+  id: number;
+  name: string | null;
+  description: string | null;
+  logo: string | null;
+  lead_staff: string | null;
+  meeting_day: string | null;
+  member_count: number;
+}
+export interface ClubMember {
+  id: number;
+  student_id: number | null;
+  student_name: string | null;
+  role: string | null;
+}
+export interface ClubFormData {
+  name: string;
+  description?: string;
+  logo?: string | null;
+  lead_staff?: string;
+  meeting_day?: string;
+}
+export function fetchClubs(token: string) {
+  return req<{ clubs: Club[]; total: number }>('/clubs', { token });
+}
+export function createClub(token: string, data: ClubFormData) {
+  return req<{ ok: boolean; id: number }>('/clubs', { method: 'POST', token, body: data });
+}
+export function updateClub(token: string, id: number, data: ClubFormData) {
+  return req<{ ok: boolean }>(`/clubs/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteClub(token: string, id: number) {
+  return req<{ ok: boolean }>(`/clubs/${id}/delete`, { method: 'POST', token, body: {} });
+}
+export function fetchClubMembers(token: string, clubId: number) {
+  return req<{ members: ClubMember[]; total: number }>(`/club-members?club_id=${clubId}`, { token });
+}
+export function addClubMember(
+  token: string,
+  data: { club_id: number; student_name: string; student_id?: number | null; role?: string },
+) {
+  return req<{ ok: boolean; id: number }>('/club-members', { method: 'POST', token, body: data });
+}
+export function removeClubMember(token: string, id: number) {
+  return req<{ ok: boolean }>(`/club-members/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
+// ─── Fee receipts (register of all payments) ────────────────────────────────
+export interface Receipt {
+  id: number;
+  student_id: number;
+  first_name: string | null;
+  last_name: string | null;
+  fee_head_name: string;
+  amount_paid: number;
+  payment_date: string | null;
+  payment_mode: string | null;
+  reference: string | null;
+  receipt_no: string | null;
+}
+export function fetchReceipts(token: string) {
+  return req<{ payments: Receipt[]; total: number }>('/fee-payments', { token });
 }
 
 export interface Section {

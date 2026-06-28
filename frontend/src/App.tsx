@@ -48,6 +48,8 @@ import { ServerControlFooter } from './components/ServerControlFooter';
 import { LetterScreen } from './components/LetterScreen';
 import { CertificateScreen } from './components/CertificateScreen';
 import { SportsScreen } from './components/SportsScreen';
+import { ClubsScreen } from './components/ClubsScreen';
+import { ReceiptsScreen } from './components/ReceiptsScreen';
 import { RoleDashboard } from './components/RoleDashboard';
 import { Placeholder } from './components/Placeholder';
 
@@ -190,6 +192,10 @@ export function App() {
     screen = <CertificateScreen />;
   } else if (active === 'sports') {
     screen = <SportsScreen />;
+  } else if (active === 'clubs') {
+    screen = <ClubsScreen />;
+  } else if (active === 'receipts') {
+    screen = <ReceiptsScreen />;
   } else if (active === 'floorplan') {
     screen = <FloorPlanScreen />;
   } else if (active === 'academic-year') {

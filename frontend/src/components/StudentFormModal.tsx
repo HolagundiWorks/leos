@@ -42,6 +42,14 @@ export function StudentFormModal({ onClose, initial }: Props) {
   const [guardianPhone, setGuardianPhone] = useState(initial?.guardian_phone ?? '');
   const [guardianRelation, setGuardianRelation] = useState<string | null>(initial?.guardian_relation ?? null);
   const [address, setAddress] = useState(initial?.address ?? '');
+  const [fatherName, setFatherName] = useState(initial?.father_name ?? '');
+  const [motherName, setMotherName] = useState(initial?.mother_name ?? '');
+  const [bloodGroup, setBloodGroup] = useState<string | null>(initial?.blood_group ?? null);
+  const [admissionDate, setAdmissionDate] = useState(initial?.admission_date ?? '');
+  const [nationality, setNationality] = useState(initial?.nationality ?? '');
+  const [category, setCategory] = useState(initial?.category ?? '');
+  const [emergencyContact, setEmergencyContact] = useState(initial?.emergency_contact ?? '');
+  const [medicalNotes, setMedicalNotes] = useState(initial?.medical_notes ?? '');
 
   useEffect(() => {
     if (initial) {
@@ -58,6 +66,14 @@ export function StudentFormModal({ onClose, initial }: Props) {
       setGuardianPhone(initial.guardian_phone ?? '');
       setGuardianRelation(initial.guardian_relation ?? null);
       setAddress(initial.address ?? '');
+      setFatherName(initial.father_name ?? '');
+      setMotherName(initial.mother_name ?? '');
+      setBloodGroup(initial.blood_group ?? null);
+      setAdmissionDate(initial.admission_date ?? '');
+      setNationality(initial.nationality ?? '');
+      setCategory(initial.category ?? '');
+      setEmergencyContact(initial.emergency_contact ?? '');
+      setMedicalNotes(initial.medical_notes ?? '');
     }
   }, [initial]);
 
@@ -75,6 +91,14 @@ export function StudentFormModal({ onClose, initial }: Props) {
     guardian_phone: guardianPhone || undefined,
     guardian_relation: guardianRelation || undefined,
     address: address || undefined,
+    father_name: fatherName || undefined,
+    mother_name: motherName || undefined,
+    blood_group: bloodGroup || undefined,
+    admission_date: admissionDate || undefined,
+    nationality: nationality || undefined,
+    category: category || undefined,
+    emergency_contact: emergencyContact || undefined,
+    medical_notes: medicalNotes || undefined,
   });
 
   const invalidate = () => {
@@ -166,6 +190,20 @@ export function StudentFormModal({ onClose, initial }: Props) {
           autosize
           minRows={2}
         />
+
+        <Divider label="Parents & additional details" labelPosition="left" />
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+          <TextInput label="Father's name" value={fatherName} onChange={(e) => setFatherName(e.currentTarget.value)} />
+          <TextInput label="Mother's name" value={motherName} onChange={(e) => setMotherName(e.currentTarget.value)} />
+          <TextInput label="Emergency contact" placeholder="+91 90000 XXXXX" value={emergencyContact} onChange={(e) => setEmergencyContact(e.currentTarget.value)} />
+          <Select label="Blood group" placeholder="Select…" data={['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']} value={bloodGroup} onChange={setBloodGroup} clearable />
+        </SimpleGrid>
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+          <TextInput type="date" label="Admission date" value={admissionDate} onChange={(e) => setAdmissionDate(e.currentTarget.value)} />
+          <TextInput label="Nationality" placeholder="Indian" value={nationality} onChange={(e) => setNationality(e.currentTarget.value)} />
+          <TextInput label="Category" placeholder="General / OBC / SC / ST" value={category} onChange={(e) => setCategory(e.currentTarget.value)} />
+        </SimpleGrid>
+        <Textarea label="Medical notes" placeholder="Allergies, conditions, medication…" value={medicalNotes} onChange={(e) => setMedicalNotes(e.currentTarget.value)} autosize minRows={2} />
 
         <Checkbox
           label="Mark as enrolled"

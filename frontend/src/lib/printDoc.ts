@@ -63,6 +63,43 @@ export function letterHtml(s: Letterhead, l: { ref_no?: string; date: string; re
   </body></html>`;
 }
 
+/** A5 fee receipt on the school letterhead. */
+export function receiptHtml(
+  s: Letterhead,
+  r: { receipt_no: string; date: string; student: string; fee_head: string; amount: number; mode: string; reference?: string },
+) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${esc(r.receipt_no)}</title>
+  <style>
+    @page { size: A5; margin: 12mm; }
+    body { font-family: Georgia, 'Times New Roman', serif; color:#1a1a1a; }
+    .head { text-align:center; border-bottom: 2px solid #1f3a5f; padding-bottom: 8px; }
+    .school { font-size: 20px; font-weight:700; color:#1f3a5f; }
+    .addr { font-size: 11px; color:#666; }
+    .title { text-align:center; font-weight:700; letter-spacing:.1em; margin:10px 0; text-transform:uppercase; }
+    table { width:100%; border-collapse:collapse; font-size:14px; margin-top:8px; }
+    td { padding:6px 4px; border-bottom:1px solid #eee; }
+    .k { color:#666; width:42%; }
+    .amt { font-size:18px; font-weight:700; }
+    .sign { margin-top:36px; text-align:right; font-size:13px; }
+  </style></head><body>
+    <div class="head">
+      ${s.logo ? `<img src="${s.logo}" style="height:48px" alt="logo"/>` : ''}
+      <div class="school">${esc(s.name)}</div>
+      ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
+    </div>
+    <div class="title">Fee Receipt</div>
+    <table>
+      <tr><td class="k">Receipt No.</td><td>${esc(r.receipt_no)}</td></tr>
+      <tr><td class="k">Date</td><td>${esc(r.date)}</td></tr>
+      <tr><td class="k">Received from</td><td>${esc(r.student)}</td></tr>
+      <tr><td class="k">Towards</td><td>${esc(r.fee_head)}</td></tr>
+      <tr><td class="k">Mode</td><td>${esc(r.mode)}${r.reference ? ` (${esc(r.reference)})` : ''}</td></tr>
+      <tr><td class="k">Amount</td><td class="amt">₹ ${r.amount.toFixed(2)}</td></tr>
+    </table>
+    <div class="sign">${s.signature ? `<img src="${s.signature}" style="height:38px;display:block;margin-left:auto"/>` : ''}${esc(s.principalName || 'Authorised Signatory')}</div>
+  </body></html>`;
+}
+
 /** Landscape, bordered certificate. */
 export function certificateHtml(
   s: Letterhead,

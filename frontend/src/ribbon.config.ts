@@ -231,7 +231,7 @@ export const ribbonTabs: RibbonTab[] = [
         id: 'fin-reporting',
         label: 'Reporting',
         actions: [
-          { key: 'receipts', label: 'Receipts', icon: Receipt, accessLevel: 2, placeholder: true },
+          { key: 'receipts', label: 'Receipts', icon: Receipt, accessLevel: 2 },
           { key: 'scholarships', label: 'Scholarships', icon: GraduationCap, accessLevel: 2 },
           { key: 'fin-reports', label: 'Reports', icon: TrendingUp, accessLevel: 2 },
         ],
@@ -258,6 +258,7 @@ export const ribbonTabs: RibbonTab[] = [
         actions: [
           { key: 'activities', label: 'Field Visits', icon: Bus, accessLevel: 2 },
           { key: 'sports', label: 'Sports', icon: Trophy, accessLevel: 2 },
+          { key: 'clubs', label: 'Clubs', icon: Users, accessLevel: 2 },
         ],
       },
       {

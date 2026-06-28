@@ -65,6 +65,20 @@ describe('API · students CRUD', () => {
     expect(res.body.student.phone).toBe('+91 90000 99999');
   });
 
+  it('stores and returns the richer profile fields', async () => {
+    const create = await client.post<{ id: number }>('/students', {
+      first_name: 'Rich', last_name: `Fields-${stamp}`,
+      father_name: 'Mr Field', mother_name: 'Mrs Field', blood_group: 'O+',
+      admission_date: '2026-06-01', nationality: 'Indian', category: 'General',
+      emergency_contact: '+91 90000 00000', medical_notes: 'None',
+    });
+    const res = await client.get<{ student: Record<string, string | boolean> }>(`/students/${create.body.id}`);
+    expect(res.body.student.father_name).toBe('Mr Field');
+    expect(res.body.student.blood_group).toBe('O+');
+    expect(res.body.student.admission_date).toBe('2026-06-01');
+    expect(res.body.student.emergency_contact).toBe('+91 90000 00000');
+  });
+
   // Regression for BUG-20260627-01: a partial update must NOT null `enrolled`
   // or break the detail read. (Pre-fix this returned 404.)
   it('a partial update preserves untouched fields and still reads back', async () => {
