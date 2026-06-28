@@ -333,6 +333,35 @@ export function deleteSection(token: string, id: number) {
   return req<{ ok: boolean }>(`/sections/${id}/delete`, { method: 'POST', token, body: {} });
 }
 
+// ─── Section roster: map students into a class/section ───────────────────────
+export interface SectionStudent {
+  id: number;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  gender: string | null;
+  enrolled_date: string | null;
+}
+export interface SectionStudentsResponse {
+  students: SectionStudent[];
+  total: number;
+}
+export function fetchSectionStudents(token: string, sectionId: number) {
+  return req<SectionStudentsResponse>(`/section-students?section_id=${sectionId}`, { token });
+}
+export function enrollSectionStudent(
+  token: string,
+  data: { section_id: number; student_id: number },
+) {
+  return req<{ ok: boolean }>('/section-students', { method: 'POST', token, body: data });
+}
+export function removeSectionStudent(
+  token: string,
+  data: { section_id: number; student_id: number },
+) {
+  return req<{ ok: boolean }>('/section-students/remove', { method: 'POST', token, body: data });
+}
+
 export interface Term {
   id: number;
   year_id: number;

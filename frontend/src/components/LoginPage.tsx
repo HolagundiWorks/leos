@@ -31,7 +31,15 @@ export function LoginPage() {
     try {
       await signIn(username.trim(), password);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Login failed');
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        // Not an API error (e.g. fetch failed) → the backend is down/hung.
+        // Point the user at the always-available server controls (footer).
+        setError(
+          "Can't reach the server. Use the server controls at the bottom-left to Restart it, then sign in again.",
+        );
+      }
     } finally {
       setLoading(false);
     }

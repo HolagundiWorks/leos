@@ -17,17 +17,126 @@ import {
   ThemeIcon,
   Title,
 } from '@mantine/core';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, DoorOpen, LayoutGrid, Pencil, Plus, Trash2, UserRound } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, ChevronUp, DoorOpen, LayoutGrid, Pencil, Plus, Trash2, UserMinus, UserRound, Users } from 'lucide-react';
 import type { ClassRow, Section } from '../api/client';
 import {
   createClass, updateClass, deleteClass,
   createSection, updateSection, deleteSection,
+  fetchSectionStudents, enrollSectionStudent, removeSectionStudent,
 } from '../api/client';
 import { useClasses } from '../hooks/useClasses';
 import { useStaff } from '../hooks/useStaff';
+import { useStudents } from '../hooks/useStudents';
 import { useClassrooms } from '../hooks/useClassrooms';
 import { useAuth } from '../stores/auth';
+
+// ─── Section roster modal: map students into a class/section ──────────────────
+function SectionRosterModal({
+  section,
+  classLabel,
+  onClose,
+}: {
+  section: Section;
+  classLabel: string;
+  onClose: () => void;
+}) {
+  const token = useAuth((s) => s.token)!;
+  const qc = useQueryClient();
+  const [toAdd, setToAdd] = useState<string | null>(null);
+
+  const roster = useQuery({
+    queryKey: ['section-students', section.id],
+    queryFn: () => fetchSectionStudents(token, section.id),
+  });
+  const { data: allStudents } = useStudents('');
+
+  const enrolledIds = new Set((roster.data?.students ?? []).map((s) => s.id));
+  const candidates = (allStudents?.students ?? [])
+    .filter((s) => !enrolledIds.has(s.id))
+    .map((s) => ({ value: String(s.id), label: `${s.first_name} ${s.last_name}` }));
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['section-students', section.id] });
+    qc.invalidateQueries({ queryKey: ['students'] });
+    qc.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+
+  const add = useMutation({
+    mutationFn: (studentId: number) =>
+      enrollSectionStudent(token, { section_id: section.id, student_id: studentId }),
+    onSuccess: () => { invalidate(); setToAdd(null); },
+  });
+  const remove = useMutation({
+    mutationFn: (studentId: number) =>
+      removeSectionStudent(token, { section_id: section.id, student_id: studentId }),
+    onSuccess: invalidate,
+  });
+
+  const enrolled = roster.data?.students ?? [];
+
+  return (
+    <Modal opened onClose={onClose} title={`Roster — ${classLabel} · ${section.name}`} centered size="md">
+      <Stack gap="md">
+        <Group gap="sm" align="flex-end" wrap="nowrap">
+          <Select
+            label="Add a student to this section"
+            placeholder={candidates.length ? 'Search students…' : 'All students already enrolled'}
+            data={candidates}
+            value={toAdd}
+            onChange={setToAdd}
+            searchable
+            clearable
+            disabled={candidates.length === 0}
+            style={{ flex: 1 }}
+            data-testid="roster-add-select"
+          />
+          <Button
+            leftSection={<Plus size={15} />}
+            disabled={!toAdd}
+            loading={add.isPending}
+            onClick={() => toAdd && add.mutate(Number(toAdd))}
+            data-testid="roster-add-button"
+          >
+            Add
+          </Button>
+        </Group>
+
+        <Text size="sm" c="dimmed">{enrolled.length} enrolled</Text>
+
+        <Stack gap={6} data-testid="roster-list">
+          {roster.isLoading ? (
+            <Skeleton height={40} radius="md" />
+          ) : enrolled.length > 0 ? (
+            enrolled.map((s) => (
+              <Group
+                key={s.id}
+                data-testid="roster-student-row"
+                justify="space-between"
+                px="sm"
+                py={6}
+                style={{ borderRadius: 8, background: 'var(--mantine-color-gray-0)' }}
+              >
+                <Text size="sm" fw={500}>{s.first_name} {s.last_name}</Text>
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  onClick={() => remove.mutate(s.id)}
+                  title="Remove from section"
+                  data-testid="roster-remove-button"
+                >
+                  <UserMinus size={15} />
+                </ActionIcon>
+              </Group>
+            ))
+          ) : (
+            <Text size="sm" c="dimmed" ta="center" py="md">No students in this section yet.</Text>
+          )}
+        </Stack>
+      </Stack>
+    </Modal>
+  );
+}
 
 // ─── Class form modal ────────────────────────────────────────────────────────
 function ClassFormModal({
@@ -149,11 +258,13 @@ function SectionRow({
   s,
   onEdit,
   onDelete,
+  onRoster,
 }: {
   grade: string | null;
   s: Section;
   onEdit: () => void;
   onDelete: () => void;
+  onRoster: () => void;
 }) {
   return (
     <Group
@@ -184,6 +295,9 @@ function SectionRow({
         )}
       </Group>
       <Group gap={4}>
+        <ActionIcon size="sm" variant="subtle" onClick={onRoster} title="Manage students" data-testid="section-roster-button">
+          <Users size={13} />
+        </ActionIcon>
         <ActionIcon size="sm" variant="subtle" onClick={onEdit} title="Edit section" data-testid="section-edit-button">
           <Pencil size={13} />
         </ActionIcon>
@@ -203,6 +317,7 @@ function ClassCard({ cls }: { cls: ClassRow }) {
   const [editingClass, setEditingClass] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
+  const [rosterSection, setRosterSection] = useState<Section | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['classes'] });
 
@@ -263,6 +378,7 @@ function ClassCard({ cls }: { cls: ClassRow }) {
                 s={s}
                 onEdit={() => setEditingSection(s)}
                 onDelete={() => doDeleteSection.mutate(s.id)}
+                onRoster={() => setRosterSection(s)}
               />
             ))}
             {cls.sections.length === 0 && (
@@ -280,6 +396,13 @@ function ClassCard({ cls }: { cls: ClassRow }) {
       )}
       {editingSection && (
         <SectionFormModal classId={cls.id} initial={editingSection} onClose={() => setEditingSection(null)} />
+      )}
+      {rosterSection && (
+        <SectionRosterModal
+          section={rosterSection}
+          classLabel={cls.name ?? 'Class'}
+          onClose={() => setRosterSection(null)}
+        />
       )}
     </>
   );

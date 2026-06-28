@@ -4582,7 +4582,12 @@ fn section_students_enroll(state: &AppState, body: &str) -> (u16, Value) {
         params![section_id, student_id, date],
     );
     match r {
-        Ok(_) => (200, json!({"ok": true})),
+        Ok(_) => {
+            // Mapping a student into a section means they're enrolled — keep the
+            // students.enrolled flag (used by the dashboard) consistent.
+            let _ = conn.execute("UPDATE students SET enrolled=1 WHERE id=?1", params![student_id]);
+            (200, json!({"ok": true}))
+        }
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
 }
@@ -4595,6 +4600,11 @@ fn section_students_remove(state: &AppState, body: &str) -> (u16, Value) {
     let _ = conn.execute(
         "DELETE FROM section_students WHERE section_id=?1 AND student_id=?2",
         params![section_id, student_id],
+    );
+    // If the student is no longer in any section, clear their enrolled flag.
+    let _ = conn.execute(
+        "UPDATE students SET enrolled=0 WHERE id=?1 AND NOT EXISTS (SELECT 1 FROM section_students WHERE student_id=?1)",
+        params![student_id],
     );
     (200, json!({"ok": true}))
 }
