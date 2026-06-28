@@ -366,6 +366,9 @@ export interface School {
   logo?: string | null;
   signature?: string | null;
   cert_bg?: string | null;
+  affiliation_no?: string | null;
+  school_code?: string | null;
+  udise_code?: string | null;
 }
 export async function fetchSchool(token: string): Promise<School | null> {
   const res = await req<{ school: School | null }>('/school', { token });
@@ -377,9 +380,28 @@ export function saveSchool(
     name: string; academic_year: string; type: string;
     address?: string; principal_name?: string;
     logo?: string | null; signature?: string | null; cert_bg?: string | null;
+    affiliation_no?: string | null; school_code?: string | null; udise_code?: string | null;
   },
 ) {
   return req<{ ok: boolean }>('/school', { method: 'POST', token, body: data });
+}
+
+// ─── Statutory annual return (OASIS / UDISE+) ───────────────────────────────
+export interface StatutoryReport {
+  school: { name: string | null; academic_year: string | null; affiliation_no: string | null; school_code: string | null; udise_code: string | null; address: string | null; principal_name: string | null } | null;
+  generated_at: string;
+  students: {
+    total: number; enrolled: number;
+    by_gender: { Male: number; Female: number; Other: number };
+    by_category: { General: number; OBC: number; SC: number; ST: number; EWS: number };
+    rte_ews: number; cwsn: number;
+  };
+  staff: { total: number; teaching: number };
+  infrastructure: { classrooms: number; classes: number; sections: number };
+  finance: { fees_collected: number };
+}
+export function fetchStatutoryReport(token: string) {
+  return req<StatutoryReport>('/compliance/statutory-report', { token });
 }
 
 // ─── Letters & Certificates (document generation) ───────────────────────────

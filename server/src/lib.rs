@@ -485,6 +485,10 @@ fn dispatch(
             return with_auth(state, token, |_| board_reg_delete(state, id));
         }
     }
+    // Statutory annual return aggregate (OASIS / UDISE+).
+    if method == &Method::Get && path == "/compliance/statutory-report" {
+        return require_level(state, token, 2, |_| statutory_report(state));
+    }
     // Compliance certificates (school safety + staff) with expiry tracking.
     if method == &Method::Get && path == "/compliance-certs" {
         return with_auth(state, token, |_| compliance_certs_list(state, url));
@@ -1572,6 +1576,56 @@ fn count(conn: &Connection, sql: &str) -> i64 {
     conn.query_row(sql, [], |r| r.get(0)).unwrap_or(0)
 }
 
+// Aggregate the figures CBSE OASIS / UDISE+ annual returns ask for.
+fn statutory_report(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let cat = |c: &str| count(&conn, &format!("SELECT COUNT(*) FROM students WHERE category='{c}'"));
+    let gender = |g: &str| count(&conn, &format!("SELECT COUNT(*) FROM students WHERE gender='{g}'"));
+    let school = conn
+        .query_row(
+            "SELECT name, academic_year, affiliation_no, school_code, udise_code, address, principal_name FROM schools ORDER BY id LIMIT 1",
+            [],
+            |r| {
+                Ok(json!({
+                    "name": r.get::<_, Option<String>>(0)?,
+                    "academic_year": r.get::<_, Option<String>>(1)?,
+                    "affiliation_no": r.get::<_, Option<String>>(2)?,
+                    "school_code": r.get::<_, Option<String>>(3)?,
+                    "udise_code": r.get::<_, Option<String>>(4)?,
+                    "address": r.get::<_, Option<String>>(5)?,
+                    "principal_name": r.get::<_, Option<String>>(6)?,
+                }))
+            },
+        )
+        .unwrap_or(json!(null));
+    let fees: f64 = conn
+        .query_row("SELECT COALESCE(SUM(amount_paid),0) FROM fee_payments", [], |r| r.get(0))
+        .unwrap_or(0.0);
+    let now: String = conn.query_row("SELECT datetime('now')", [], |r| r.get(0)).unwrap_or_default();
+    (200, json!({
+        "school": school,
+        "generated_at": now,
+        "students": {
+            "total": count(&conn, "SELECT COUNT(*) FROM students"),
+            "enrolled": count(&conn, "SELECT COUNT(*) FROM students WHERE enrolled=1"),
+            "by_gender": { "Male": gender("Male"), "Female": gender("Female"), "Other": gender("Other") },
+            "by_category": { "General": cat("General"), "OBC": cat("OBC"), "SC": cat("SC"), "ST": cat("ST"), "EWS": cat("EWS") },
+            "rte_ews": cat("EWS"),
+            "cwsn": count(&conn, "SELECT COUNT(*) FROM students WHERE cwsn='Yes'"),
+        },
+        "staff": {
+            "total": count(&conn, "SELECT COUNT(*) FROM staff"),
+            "teaching": count(&conn, "SELECT COUNT(*) FROM staff WHERE profile IN ('teacher','class_teacher','exam_coord','timetable_coord')"),
+        },
+        "infrastructure": {
+            "classrooms": count(&conn, "SELECT COUNT(*) FROM classrooms"),
+            "classes": count(&conn, "SELECT COUNT(*) FROM classes"),
+            "sections": count(&conn, "SELECT COUNT(*) FROM sections"),
+        },
+        "finance": { "fees_collected": fees },
+    }))
+}
+
 fn dashboard_summary(state: &AppState) -> Value {
     let conn = state.conn.lock().unwrap();
     json!({
@@ -1953,6 +2007,10 @@ fn migrate_schema(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE schools ADD COLUMN logo TEXT", []);
     let _ = conn.execute("ALTER TABLE schools ADD COLUMN signature TEXT", []);
     let _ = conn.execute("ALTER TABLE schools ADD COLUMN cert_bg TEXT", []);
+    // Statutory identifiers (for OASIS / UDISE+ submissions).
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN affiliation_no TEXT", []);
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN school_code TEXT", []);
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN udise_code TEXT", []);
     let _ = conn.execute(
         "CREATE TABLE IF NOT EXISTS letters(id INTEGER PRIMARY KEY AUTOINCREMENT, ref_no TEXT, letter_date TEXT, recipient TEXT, subject TEXT, body TEXT, created_at TEXT DEFAULT (datetime('now')))",
         [],
@@ -6907,7 +6965,7 @@ fn seed_teacher_subjects(conn: &Connection) {
 fn school_get(state: &AppState) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let row = conn.query_row(
-        "SELECT name, academic_year, type, address, principal_name, logo, signature, cert_bg FROM schools ORDER BY id LIMIT 1",
+        "SELECT name, academic_year, type, address, principal_name, logo, signature, cert_bg, affiliation_no, school_code, udise_code FROM schools ORDER BY id LIMIT 1",
         [],
         |r| {
             Ok((
@@ -6919,17 +6977,21 @@ fn school_get(state: &AppState) -> (u16, Value) {
                 r.get::<_, Option<String>>(5)?,
                 r.get::<_, Option<String>>(6)?,
                 r.get::<_, Option<String>>(7)?,
+                r.get::<_, Option<String>>(8)?,
+                r.get::<_, Option<String>>(9)?,
+                r.get::<_, Option<String>>(10)?,
             ))
         },
     );
     match row {
-        Ok((name, ay, typ, address, principal, logo, signature, cert_bg)) => (
+        Ok((name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code)) => (
             200,
             json!({"school": {
                 "name": name, "academic_year": ay,
                 "type": typ.unwrap_or_else(|| "school".into()),
                 "address": address, "principal_name": principal,
                 "logo": logo, "signature": signature, "cert_bg": cert_bg,
+                "affiliation_no": affiliation_no, "school_code": school_code, "udise_code": udise_code,
             }}),
         ),
         Err(_) => (200, json!({"school": Value::Null})),
@@ -6946,6 +7008,9 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     let logo = v["logo"].as_str().filter(|s| !s.is_empty());
     let signature = v["signature"].as_str().filter(|s| !s.is_empty());
     let cert_bg = v["cert_bg"].as_str().filter(|s| !s.is_empty());
+    let affiliation_no = v["affiliation_no"].as_str().filter(|s| !s.is_empty());
+    let school_code = v["school_code"].as_str().filter(|s| !s.is_empty());
+    let udise_code = v["udise_code"].as_str().filter(|s| !s.is_empty());
     let conn = state.conn.lock().unwrap();
     let existing: Option<i64> = conn
         .query_row("SELECT id FROM schools ORDER BY id LIMIT 1", [], |r| r.get(0))
@@ -6953,14 +7018,14 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     match existing {
         Some(id) => {
             let _ = conn.execute(
-                "UPDATE schools SET name=?1, academic_year=?2, type=?3, address=?4, principal_name=?5, logo=?6, signature=?7, cert_bg=?8 WHERE id=?9",
-                params![name, ay, typ, address, principal, logo, signature, cert_bg, id],
+                "UPDATE schools SET name=?1, academic_year=?2, type=?3, address=?4, principal_name=?5, logo=?6, signature=?7, cert_bg=?8, affiliation_no=?9, school_code=?10, udise_code=?11 WHERE id=?12",
+                params![name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code, id],
             );
         }
         None => {
             let _ = conn.execute(
-                "INSERT INTO schools(name, academic_year, type, address, principal_name, logo, signature, cert_bg) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
-                params![name, ay, typ, address, principal, logo, signature, cert_bg],
+                "INSERT INTO schools(name, academic_year, type, address, principal_name, logo, signature, cert_bg, affiliation_no, school_code, udise_code) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                params![name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code],
             );
         }
     }
