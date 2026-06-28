@@ -284,6 +284,9 @@ export interface School {
   type: string | null;
   address?: string | null;
   principal_name?: string | null;
+  logo?: string | null;
+  signature?: string | null;
+  cert_bg?: string | null;
 }
 export async function fetchSchool(token: string): Promise<School | null> {
   const res = await req<{ school: School | null }>('/school', { token });
@@ -291,7 +294,11 @@ export async function fetchSchool(token: string): Promise<School | null> {
 }
 export function saveSchool(
   token: string,
-  data: { name: string; academic_year: string; type: string; address?: string; principal_name?: string },
+  data: {
+    name: string; academic_year: string; type: string;
+    address?: string; principal_name?: string;
+    logo?: string | null; signature?: string | null; cert_bg?: string | null;
+  },
 ) {
   return req<{ ok: boolean }>('/school', { method: 'POST', token, body: data });
 }

@@ -42,17 +42,24 @@ describe('API · letters & certificates', () => {
     expect((await client.post('/certificates', { cert_type: 'rank' })).status).toBe(422);
   });
 
-  it('persists the new school letterhead fields (address, principal)', async () => {
+  it('persists letterhead fields + branding images (logo, signature, cert bg)', async () => {
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
     const save = await client.post('/school', {
       name: 'School Of Architecture',
       academic_year: '2026-27',
       type: 'school',
       address: '12 Lake Road, Bengaluru',
       principal_name: 'Dr. A. Rao',
+      logo: dataUrl,
+      signature: dataUrl,
+      cert_bg: dataUrl,
     });
     expect(save.ok).toBe(true);
-    const got = await client.get<{ school: { address: string; principal_name: string } }>('/school');
+    const got = await client.get<{ school: { address: string; principal_name: string; logo: string; signature: string; cert_bg: string } }>('/school');
     expect(got.body.school.address).toBe('12 Lake Road, Bengaluru');
     expect(got.body.school.principal_name).toBe('Dr. A. Rao');
+    expect(got.body.school.logo).toBe(dataUrl);
+    expect(got.body.school.signature).toBe(dataUrl);
+    expect(got.body.school.cert_bg).toBe(dataUrl);
   });
 });

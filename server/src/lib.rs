@@ -1641,6 +1641,11 @@ fn migrate_schema(conn: &Connection) {
     // Letterhead fields + document modules (letters, certificates).
     let _ = conn.execute("ALTER TABLE schools ADD COLUMN address TEXT", []);
     let _ = conn.execute("ALTER TABLE schools ADD COLUMN principal_name TEXT", []);
+    // Branding images (stored as base64 data URLs): school logo, principal
+    // signature, default certificate background.
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN logo TEXT", []);
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN signature TEXT", []);
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN cert_bg TEXT", []);
     let _ = conn.execute(
         "CREATE TABLE IF NOT EXISTS letters(id INTEGER PRIMARY KEY AUTOINCREMENT, ref_no TEXT, letter_date TEXT, recipient TEXT, subject TEXT, body TEXT, created_at TEXT DEFAULT (datetime('now')))",
         [],
@@ -6474,7 +6479,7 @@ fn seed_teacher_subjects(conn: &Connection) {
 fn school_get(state: &AppState) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let row = conn.query_row(
-        "SELECT name, academic_year, type, address, principal_name FROM schools ORDER BY id LIMIT 1",
+        "SELECT name, academic_year, type, address, principal_name, logo, signature, cert_bg FROM schools ORDER BY id LIMIT 1",
         [],
         |r| {
             Ok((
@@ -6483,16 +6488,20 @@ fn school_get(state: &AppState) -> (u16, Value) {
                 r.get::<_, Option<String>>(2)?,
                 r.get::<_, Option<String>>(3)?,
                 r.get::<_, Option<String>>(4)?,
+                r.get::<_, Option<String>>(5)?,
+                r.get::<_, Option<String>>(6)?,
+                r.get::<_, Option<String>>(7)?,
             ))
         },
     );
     match row {
-        Ok((name, ay, typ, address, principal)) => (
+        Ok((name, ay, typ, address, principal, logo, signature, cert_bg)) => (
             200,
             json!({"school": {
                 "name": name, "academic_year": ay,
                 "type": typ.unwrap_or_else(|| "school".into()),
                 "address": address, "principal_name": principal,
+                "logo": logo, "signature": signature, "cert_bg": cert_bg,
             }}),
         ),
         Err(_) => (200, json!({"school": Value::Null})),
@@ -6506,6 +6515,9 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     let typ = v["type"].as_str().unwrap_or("school").to_string();
     let address = v["address"].as_str().filter(|s| !s.is_empty());
     let principal = v["principal_name"].as_str().filter(|s| !s.is_empty());
+    let logo = v["logo"].as_str().filter(|s| !s.is_empty());
+    let signature = v["signature"].as_str().filter(|s| !s.is_empty());
+    let cert_bg = v["cert_bg"].as_str().filter(|s| !s.is_empty());
     let conn = state.conn.lock().unwrap();
     let existing: Option<i64> = conn
         .query_row("SELECT id FROM schools ORDER BY id LIMIT 1", [], |r| r.get(0))
@@ -6513,14 +6525,14 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     match existing {
         Some(id) => {
             let _ = conn.execute(
-                "UPDATE schools SET name=?1, academic_year=?2, type=?3, address=?4, principal_name=?5 WHERE id=?6",
-                params![name, ay, typ, address, principal, id],
+                "UPDATE schools SET name=?1, academic_year=?2, type=?3, address=?4, principal_name=?5, logo=?6, signature=?7, cert_bg=?8 WHERE id=?9",
+                params![name, ay, typ, address, principal, logo, signature, cert_bg, id],
             );
         }
         None => {
             let _ = conn.execute(
-                "INSERT INTO schools(name, academic_year, type, address, principal_name) VALUES(?1,?2,?3,?4,?5)",
-                params![name, ay, typ, address, principal],
+                "INSERT INTO schools(name, academic_year, type, address, principal_name, logo, signature, cert_bg) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![name, ay, typ, address, principal, logo, signature, cert_bg],
             );
         }
     }

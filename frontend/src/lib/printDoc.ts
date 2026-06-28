@@ -23,6 +23,9 @@ export interface Letterhead {
   name: string;
   address?: string | null;
   principalName?: string | null;
+  logo?: string | null;
+  signature?: string | null;
+  certBg?: string | null;
 }
 
 /** A4 letter on the principal's letterhead. */
@@ -42,6 +45,7 @@ export function letterHtml(s: Letterhead, l: { ref_no?: string; date: string; re
     .pname { font-weight:700; margin-top: 40px; }
   </style></head><body>
     <div class="head">
+      ${s.logo ? `<img src="${s.logo}" style="height:64px;margin-bottom:6px" alt="logo"/>` : ''}
       <div class="school">${esc(s.name)}</div>
       ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
       <div class="office">Office of the Principal</div>
@@ -52,7 +56,8 @@ export function letterHtml(s: Letterhead, l: { ref_no?: string; date: string; re
     <div class="body">${paras(l.body)}</div>
     <div class="sign">
       <div>Yours sincerely,</div>
-      <div class="pname">${esc(s.principalName || '')}</div>
+      ${s.signature ? `<img src="${s.signature}" style="height:46px;display:block;margin-top:8px" alt="signature"/>` : ''}
+      <div class="pname"${s.signature ? ' style="margin-top:6px"' : ''}>${esc(s.principalName || '')}</div>
       <div>Principal, ${esc(s.name)}</div>
     </div>
   </body></html>`;
@@ -67,8 +72,9 @@ export function certificateHtml(
   <style>
     @page { size: A4 landscape; margin: 0; }
     body { font-family: Georgia, 'Times New Roman', serif; color:#1a1a1a; margin:0; }
-    .sheet { width: 297mm; height: 209mm; box-sizing:border-box; padding: 14mm; }
-    .frame { height:100%; box-sizing:border-box; border: 6px solid #b8860b; outline: 2px solid #b8860b; outline-offset: 6px; padding: 18mm; text-align:center; display:flex; flex-direction:column; justify-content:space-between; }
+    .sheet { width: 297mm; height: 209mm; box-sizing:border-box; padding: 14mm; position: relative; }
+    .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.16; z-index:0; }
+    .frame { position:relative; z-index:1; height:100%; box-sizing:border-box; border: 6px solid #b8860b; outline: 2px solid #b8860b; outline-offset: 6px; padding: 18mm; text-align:center; display:flex; flex-direction:column; justify-content:space-between; }
     .school { font-size: 24px; font-weight:700; color:#1f3a5f; letter-spacing:.5px; }
     .addr { font-size: 12px; color:#666; }
     .ctitle { font-size: 38px; font-weight:700; color:#b8860b; letter-spacing:1px; margin: 8px 0; font-variant: small-caps; }
@@ -78,8 +84,11 @@ export function certificateHtml(
     .foot { display:flex; justify-content:space-between; align-items:flex-end; font-size:13px; margin-top: 12px; }
     .sigline { border-top:1px solid #333; padding-top:4px; min-width: 200px; }
   </style></head><body>
-    <div class="sheet"><div class="frame">
+    <div class="sheet">
+      ${s.certBg ? `<img class="bg" src="${s.certBg}" alt=""/>` : ''}
+      <div class="frame">
       <div>
+        ${s.logo ? `<img src="${s.logo}" style="height:54px;margin-bottom:4px" alt="logo"/>` : ''}
         <div class="school">${esc(s.name)}</div>
         ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
       </div>
@@ -90,8 +99,8 @@ export function certificateHtml(
         <div class="reason">${esc(c.body)}</div>
       </div>
       <div class="foot">
-        <div>Serial: ${esc(c.serial ?? '—')}<br/>Date: ${esc(c.date)}</div>
-        <div class="sigline">${esc(s.principalName || '')}<br/>Principal</div>
+        <div style="text-align:left">Serial: ${esc(c.serial ?? '—')}<br/>Date: ${esc(c.date)}</div>
+        <div class="sigline">${s.signature ? `<img src="${s.signature}" style="height:40px;display:block;margin:0 auto 2px" alt="signature"/>` : ''}${esc(s.principalName || '')}<br/>Principal</div>
       </div>
     </div></div>
   </body></html>`;

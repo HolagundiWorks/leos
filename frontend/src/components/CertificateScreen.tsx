@@ -61,7 +61,14 @@ export function CertificateScreen() {
   );
   const matchedId = (students?.students ?? []).find((s) => `${s.first_name} ${s.last_name}`.trim() === studentName.trim())?.id ?? null;
 
-  const head = { name: school?.name ?? 'Your School', address: school?.address, principalName: school?.principal_name };
+  const head = {
+    name: school?.name ?? 'Your School',
+    address: school?.address,
+    principalName: school?.principal_name,
+    logo: school?.logo,
+    signature: school?.signature,
+    certBg: school?.cert_bg,
+  };
 
   const buildPrint = (serial: string, who: string, t: string, b: string, d: string) =>
     printHtml(certificateHtml(head, { serial, date: d, type, title: t, studentName: who, body: b }));
@@ -103,8 +110,10 @@ export function CertificateScreen() {
           </Card>
 
           {/* Live certificate preview */}
-          <Card withBorder data-testid="cert-preview" style={{ background: '#fff' }}>
-            <div style={{ border: '5px solid #b8860b', outline: '2px solid #b8860b', outlineOffset: 5, padding: 20, textAlign: 'center', fontFamily: 'Georgia, serif', color: '#1a1a1a' }}>
+          <Card withBorder data-testid="cert-preview" style={{ background: '#fff', position: 'relative', overflow: 'hidden' }}>
+            {head.certBg && <img src={head.certBg} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.16 }} />}
+            <div style={{ position: 'relative', border: '5px solid #b8860b', outline: '2px solid #b8860b', outlineOffset: 5, padding: 20, textAlign: 'center', fontFamily: 'Georgia, serif', color: '#1a1a1a' }}>
+              {head.logo && <img src={head.logo} alt="logo" style={{ height: 42, marginBottom: 2 }} />}
               <Text fw={700} size="lg" style={{ color: '#1f3a5f' }}>{head.name}</Text>
               {head.address && <Text size="xs" c="dimmed">{head.address}</Text>}
               <Text fw={700} my="sm" style={{ color: '#b8860b', fontSize: 24, fontVariant: 'small-caps', letterSpacing: 1 }}>{def.title}</Text>
@@ -113,7 +122,10 @@ export function CertificateScreen() {
               <Text size="sm" mt={4}>{body || def.tmpl(detail)}</Text>
               <Group justify="space-between" align="flex-end" mt="xl">
                 <Text size="xs" c="dimmed" ta="left">Serial: (on issue)<br />Date: {date}</Text>
-                <Text size="xs" style={{ borderTop: '1px solid #333', paddingTop: 4 }}>{head.principalName || 'Principal'}<br />Principal</Text>
+                <div style={{ textAlign: 'center' }}>
+                  {head.signature && <img src={head.signature} alt="signature" style={{ height: 32, display: 'block', margin: '0 auto 2px' }} />}
+                  <Text size="xs" style={{ borderTop: '1px solid #333', paddingTop: 4 }}>{head.principalName || 'Principal'}<br />Principal</Text>
+                </div>
               </Group>
             </div>
           </Card>

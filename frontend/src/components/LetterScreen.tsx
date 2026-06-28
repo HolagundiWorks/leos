@@ -37,6 +37,8 @@ export function LetterScreen() {
     name: school?.name ?? 'Your School',
     address: school?.address,
     principalName: school?.principal_name,
+    logo: school?.logo,
+    signature: school?.signature,
   };
 
   const print = (refNo: string) =>
@@ -81,6 +83,7 @@ export function LetterScreen() {
           <Card withBorder data-testid="letter-preview">
             <Stack gap={2} style={{ fontFamily: 'Georgia, serif', color: '#1a1a1a' }}>
               <div style={{ textAlign: 'center', borderBottom: '3px double #1f3a5f', paddingBottom: 8 }}>
+                {head.logo && <img src={head.logo} alt="logo" style={{ height: 48, marginBottom: 4 }} />}
                 <Text fw={700} size="lg" style={{ color: '#1f3a5f' }}>{head.name}</Text>
                 {head.address && <Text size="xs" c="dimmed">{head.address}</Text>}
                 <Text size="xs" style={{ letterSpacing: '.18em', textTransform: 'uppercase', color: '#1f3a5f' }}>Office of the Principal</Text>
@@ -93,7 +96,8 @@ export function LetterScreen() {
               <Text fw={700} ta="center" td="underline" mt="xs">{subject ? `Subject: ${subject}` : 'Subject: …'}</Text>
               <Text size="sm" mt={4} style={{ whiteSpace: 'pre-wrap', textAlign: 'justify' }}>{body || 'The letter body will appear here…'}</Text>
               <Text size="sm" mt="lg">Yours sincerely,</Text>
-              <Text fw={700} mt="lg">{head.principalName || '(set principal in Settings)'}</Text>
+              {head.signature && <img src={head.signature} alt="signature" style={{ height: 40, marginTop: 6 }} />}
+              <Text fw={700} mt={head.signature ? 4 : 'lg'}>{head.principalName || '(set principal in Settings)'}</Text>
               <Text size="sm">Principal, {head.name}</Text>
             </Stack>
           </Card>
