@@ -629,6 +629,29 @@ export function deleteBoardRegistration(token: string, id: number) {
   return req<{ ok: boolean }>(`/board-registrations/${id}/delete`, { method: 'POST', token, body: {} });
 }
 
+// ─── Communication log ──────────────────────────────────────────────────────
+export interface StudentMessage {
+  id: number;
+  channel: string | null;
+  direction: string | null;
+  subject: string | null;
+  body: string | null;
+  acknowledged: boolean;
+  created_at: string | null;
+}
+export function fetchStudentMessages(token: string, studentId: number) {
+  return req<{ messages: StudentMessage[]; total: number }>(`/student-communications?student_id=${studentId}`, { token });
+}
+export function addStudentMessage(token: string, data: { student_id: number; channel: string; direction: string; subject: string; body?: string }) {
+  return req<{ ok: boolean; id: number }>('/student-communications', { method: 'POST', token, body: data });
+}
+export function ackStudentMessage(token: string, id: number, acknowledged: boolean) {
+  return req<{ ok: boolean }>(`/student-communications/${id}/ack`, { method: 'POST', token, body: { acknowledged } });
+}
+export function deleteStudentMessage(token: string, id: number) {
+  return req<{ ok: boolean }>(`/student-communications/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
 export interface Section {
   id: number;
   name: string | null;

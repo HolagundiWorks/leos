@@ -460,6 +460,25 @@ fn dispatch(
             return with_auth(state, token, |_| board_reg_delete(state, id));
         }
     }
+    // Communication log.
+    if method == &Method::Get && path == "/student-communications" {
+        return with_auth(state, token, |_| student_comms_list(state, url));
+    }
+    if method == &Method::Post && path == "/student-communications" {
+        return with_auth(state, token, |_| student_comm_add(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/student-communications/") && path.ends_with("/ack") {
+        let id_str = &path["/student-communications/".len()..path.len() - "/ack".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| student_comm_ack(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/student-communications/") && path.ends_with("/delete") {
+        let id_str = &path["/student-communications/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| student_comm_delete(state, id));
+        }
+    }
     if method == &Method::Get && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_get(state));
     }
@@ -1786,6 +1805,11 @@ fn migrate_schema(conn: &Connection) {
     // CBSE board-exam registration (LOC / admit card lifecycle).
     let _ = conn.execute(
         "CREATE TABLE IF NOT EXISTS board_registrations(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, exam_year TEXT, registration_no TEXT, loc_status TEXT, admit_card_status TEXT, board_subjects TEXT, notes TEXT, updated_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    // Parent/student communication log (circular / SMS / email / call / meeting).
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS student_communications(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, channel TEXT, direction TEXT, subject TEXT, body TEXT, acknowledged INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
         [],
     );
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
@@ -7319,6 +7343,73 @@ fn board_reg_save(state: &AppState, body: &str, id: Option<i64>) -> (u16, Value)
 fn board_reg_delete(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let _ = conn.execute("DELETE FROM board_registrations WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+// ---- Communication log ----
+
+fn student_comms_list(state: &AppState, url: &str) -> (u16, Value) {
+    let student_id: i64 = match q_param(url, "student_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "student_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, channel, direction, subject, body, acknowledged, created_at FROM student_communications WHERE student_id=?1 ORDER BY id DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map(params![student_id], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "channel": r.get::<_, Option<String>>(1)?,
+                "direction": r.get::<_, Option<String>>(2)?,
+                "subject": r.get::<_, Option<String>>(3)?,
+                "body": r.get::<_, Option<String>>(4)?,
+                "acknowledged": r.get::<_, Option<i64>>(5)?.unwrap_or(0) == 1,
+                "created_at": r.get::<_, Option<String>>(6)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"messages": rows, "total": rows.len()}))
+}
+
+fn student_comm_add(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let student_id = match v["student_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "student_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO student_communications(student_id, channel, direction, subject, body) VALUES(?1,?2,?3,?4,?5)",
+        params![
+            student_id,
+            v["channel"].as_str().filter(|s| !s.is_empty()),
+            v["direction"].as_str().filter(|s| !s.is_empty()),
+            v["subject"].as_str().filter(|s| !s.is_empty()),
+            v["body"].as_str().filter(|s| !s.is_empty()),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn student_comm_ack(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let ack = v["acknowledged"].as_bool().unwrap_or(true) as i64;
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("UPDATE student_communications SET acknowledged=?1 WHERE id=?2", params![ack, id]);
+    (200, json!({"ok": true}))
+}
+
+fn student_comm_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM student_communications WHERE id=?1", params![id]);
     (200, json!({"ok": true}))
 }
 

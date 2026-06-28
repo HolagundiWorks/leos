@@ -21,6 +21,7 @@ import type { StudentDetail } from '../api/client';
 import { StudentFormModal } from './StudentFormModal';
 import { StudentDocumentsTab } from './StudentDocumentsTab';
 import { StudentAcademicsTab } from './StudentAcademicsTab';
+import { StudentCommsTab } from './StudentCommsTab';
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -98,6 +99,7 @@ export function StudentProfileScreen({ id, onBack }: { id: number; onBack: () =>
               <Tabs.Tab value="health">Health</Tabs.Tab>
               <Tabs.Tab value="academics">Academics</Tabs.Tab>
               <Tabs.Tab value="cocurricular">Co-curricular</Tabs.Tab>
+              <Tabs.Tab value="comms">Comms</Tabs.Tab>
               <Tabs.Tab value="documents">Documents</Tabs.Tab>
             </Tabs.List>
 
@@ -154,6 +156,7 @@ export function StudentProfileScreen({ id, onBack }: { id: number; onBack: () =>
 
             <Tabs.Panel value="academics" p="lg"><StudentAcademicsTab studentId={id} /></Tabs.Panel>
             <Tabs.Panel value="cocurricular" p="lg"><Text c="dimmed" ta="center" py="xl">Club memberships and sports participation will appear here.</Text></Tabs.Panel>
+            <Tabs.Panel value="comms" p="lg"><StudentCommsTab studentId={id} /></Tabs.Panel>
             <Tabs.Panel value="documents" p="lg"><StudentDocumentsTab studentId={id} /></Tabs.Panel>
           </Tabs>
         </Card>
