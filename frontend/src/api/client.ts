@@ -688,6 +688,47 @@ export function fetchStudentAudit(token: string, studentId: number) {
   return req<{ history: AuditEntry[]; total: number }>(`/students/${studentId}/audit`, { token });
 }
 
+// ─── Compliance certificates (school safety + staff) ────────────────────────
+export interface ComplianceCert {
+  id: number;
+  scope: string | null;
+  staff_id: number | null;
+  staff_name: string | null;
+  cert_type: string | null;
+  authority: string | null;
+  reference_no: string | null;
+  issue_date: string | null;
+  expiry_date: string | null;
+  notes: string | null;
+  days_left: number | null;
+  status: 'Valid' | 'Expiring' | 'Expired' | 'No expiry';
+  has_document: boolean;
+}
+export interface ComplianceCertInput {
+  scope: string;
+  staff_id?: number | null;
+  cert_type: string;
+  authority?: string;
+  reference_no?: string;
+  issue_date?: string;
+  expiry_date?: string;
+  document?: string;
+  notes?: string;
+}
+export function fetchComplianceCerts(token: string, scope?: string) {
+  const q = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+  return req<{ certificates: ComplianceCert[]; total: number; expired: number; expiring: number }>(`/compliance-certs${q}`, { token });
+}
+export function fetchComplianceCertDoc(token: string, id: number) {
+  return req<{ certificate: { id: number; cert_type: string | null; document: string | null } }>(`/compliance-certs/${id}`, { token }).then((r) => r.certificate);
+}
+export function saveComplianceCert(token: string, data: ComplianceCertInput, id?: number) {
+  return req<{ ok: boolean; id: number }>(id ? `/compliance-certs/${id}/update` : '/compliance-certs', { method: 'POST', token, body: data });
+}
+export function deleteComplianceCert(token: string, id: number) {
+  return req<{ ok: boolean }>(`/compliance-certs/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
 export interface Section {
   id: number;
   name: string | null;

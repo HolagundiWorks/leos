@@ -22,6 +22,7 @@ import {
   Bus,
   Settings,
   Shield,
+  ShieldCheck,
   Download,
   ArrowDownToLine,
   Cpu,
@@ -307,6 +308,13 @@ export const ribbonTabs: RibbonTab[] = [
         label: 'Design Connect',
         actions: [
           { key: 'design', label: 'Canva', icon: Palette, accessLevel: 2 },
+        ],
+      },
+      {
+        id: 'compliance',
+        label: 'Compliance',
+        actions: [
+          { key: 'compliance-certs', label: 'Certificates & Safety', icon: ShieldCheck, accessLevel: 2 },
         ],
       },
       {

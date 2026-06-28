@@ -479,6 +479,30 @@ fn dispatch(
             return with_auth(state, token, |_| board_reg_delete(state, id));
         }
     }
+    // Compliance certificates (school safety + staff) with expiry tracking.
+    if method == &Method::Get && path == "/compliance-certs" {
+        return with_auth(state, token, |_| compliance_certs_list(state, url));
+    }
+    if method == &Method::Post && path == "/compliance-certs" {
+        return require_level(state, token, 2, |_| compliance_cert_save(state, body, None));
+    }
+    if method == &Method::Post && path.starts_with("/compliance-certs/") && path.ends_with("/update") {
+        let id_str = &path["/compliance-certs/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return require_level(state, token, 2, |_| compliance_cert_save(state, body, Some(id)));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/compliance-certs/") && path.ends_with("/delete") {
+        let id_str = &path["/compliance-certs/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return require_level(state, token, 2, |_| compliance_cert_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path.starts_with("/compliance-certs/") {
+        if let Ok(id) = path["/compliance-certs/".len()..].parse::<i64>() {
+            return with_auth(state, token, |_| compliance_cert_get(state, id));
+        }
+    }
     // Communication log.
     if method == &Method::Get && path == "/student-communications" {
         return with_auth(state, token, |_| student_comms_list(state, url));
@@ -1969,6 +1993,11 @@ fn migrate_schema(conn: &Connection) {
     // Parent/student communication log (circular / SMS / email / call / meeting).
     let _ = conn.execute(
         "CREATE TABLE IF NOT EXISTS student_communications(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, channel TEXT, direction TEXT, subject TEXT, body TEXT, acknowledged INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    // Compliance certificates (school safety + staff) with expiry tracking.
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS compliance_certificates(id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, staff_id INTEGER, cert_type TEXT, authority TEXT, reference_no TEXT, issue_date TEXT, expiry_date TEXT, document TEXT, notes TEXT, created_at TEXT DEFAULT (datetime('now')))",
         [],
     );
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
@@ -7589,6 +7618,120 @@ fn student_comm_ack(state: &AppState, id: i64, body: &str) -> (u16, Value) {
 fn student_comm_delete(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let _ = conn.execute("DELETE FROM student_communications WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+// ---- Compliance certificates (school safety + staff) with expiry tracking ----
+
+fn cert_status(days: Option<i64>) -> &'static str {
+    match days {
+        None => "No expiry",
+        Some(d) if d < 0 => "Expired",
+        Some(d) if d <= 30 => "Expiring",
+        Some(_) => "Valid",
+    }
+}
+
+fn compliance_certs_list(state: &AppState, url: &str) -> (u16, Value) {
+    let scope = q_param(url, "scope");
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT c.id, c.scope, c.staff_id, st.first_name || ' ' || st.last_name AS staff_name,
+                c.cert_type, c.authority, c.reference_no, c.issue_date, c.expiry_date, c.notes,
+                CASE WHEN c.expiry_date IS NULL OR c.expiry_date='' THEN NULL
+                     ELSE CAST(julianday(c.expiry_date) - julianday('now') AS INTEGER) END AS days_left,
+                CASE WHEN c.document IS NULL OR c.document='' THEN 0 ELSE 1 END AS has_doc
+         FROM compliance_certificates c LEFT JOIN staff st ON st.id = c.staff_id
+         WHERE (?1 IS NULL OR c.scope = ?1)
+         ORDER BY (c.expiry_date IS NULL), c.expiry_date ASC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map(params![scope], |r| {
+            let days: Option<i64> = r.get(10)?;
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "scope": r.get::<_, Option<String>>(1)?,
+                "staff_id": r.get::<_, Option<i64>>(2)?,
+                "staff_name": r.get::<_, Option<String>>(3)?,
+                "cert_type": r.get::<_, Option<String>>(4)?,
+                "authority": r.get::<_, Option<String>>(5)?,
+                "reference_no": r.get::<_, Option<String>>(6)?,
+                "issue_date": r.get::<_, Option<String>>(7)?,
+                "expiry_date": r.get::<_, Option<String>>(8)?,
+                "notes": r.get::<_, Option<String>>(9)?,
+                "days_left": days,
+                "status": cert_status(days),
+                "has_document": r.get::<_, i64>(11)? == 1,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    // Summary counts for the dashboard.
+    let mut expired = 0;
+    let mut expiring = 0;
+    for row in &rows {
+        match row["status"].as_str() {
+            Some("Expired") => expired += 1,
+            Some("Expiring") => expiring += 1,
+            _ => {}
+        }
+    }
+    (200, json!({"certificates": rows, "total": rows.len(), "expired": expired, "expiring": expiring}))
+}
+
+fn compliance_cert_get(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let r = conn.query_row(
+        "SELECT id, cert_type, document FROM compliance_certificates WHERE id=?1",
+        params![id],
+        |r| Ok(json!({"id": r.get::<_, i64>(0)?, "cert_type": r.get::<_, Option<String>>(1)?, "document": r.get::<_, Option<String>>(2)?})),
+    );
+    match r {
+        Ok(d) => (200, json!({"certificate": d})),
+        Err(_) => (404, json!({"error": "certificate not found"})),
+    }
+}
+
+fn compliance_cert_save(state: &AppState, body: &str, id: Option<i64>) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    let p = (
+        v["scope"].as_str().filter(|s| !s.is_empty()),
+        v["staff_id"].as_i64(),
+        v["cert_type"].as_str().filter(|s| !s.is_empty()),
+        v["authority"].as_str().filter(|s| !s.is_empty()),
+        v["reference_no"].as_str().filter(|s| !s.is_empty()),
+        v["issue_date"].as_str().filter(|s| !s.is_empty()),
+        v["expiry_date"].as_str().filter(|s| !s.is_empty()),
+        v["notes"].as_str().filter(|s| !s.is_empty()),
+    );
+    if let Some(id) = id {
+        // Update everything except the document unless a new one is supplied.
+        let _ = conn.execute(
+            "UPDATE compliance_certificates SET scope=?1, staff_id=?2, cert_type=?3, authority=?4, reference_no=?5, issue_date=?6, expiry_date=?7, notes=?8 WHERE id=?9",
+            params![p.0, p.1, p.2, p.3, p.4, p.5, p.6, p.7, id],
+        );
+        if let Some(doc) = v["document"].as_str().filter(|s| !s.is_empty()) {
+            let _ = conn.execute("UPDATE compliance_certificates SET document=?1 WHERE id=?2", params![doc, id]);
+        }
+        (200, json!({"ok": true, "id": id}))
+    } else {
+        match conn.execute(
+            "INSERT INTO compliance_certificates(scope, staff_id, cert_type, authority, reference_no, issue_date, expiry_date, document, notes) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![p.0, p.1, p.2, p.3, p.4, p.5, p.6, v["document"].as_str().filter(|s| !s.is_empty()), p.7],
+        ) {
+            Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+            Err(e) => (500, json!({"error": format!("{e}")})),
+        }
+    }
+}
+
+fn compliance_cert_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM compliance_certificates WHERE id=?1", params![id]);
     (200, json!({"ok": true}))
 }
 
