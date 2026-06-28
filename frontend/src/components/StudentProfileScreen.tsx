@@ -20,6 +20,7 @@ import { initials } from '../types';
 import type { StudentDetail } from '../api/client';
 import { StudentFormModal } from './StudentFormModal';
 import { StudentDocumentsTab } from './StudentDocumentsTab';
+import { StudentAcademicsTab } from './StudentAcademicsTab';
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -151,7 +152,7 @@ export function StudentProfileScreen({ id, onBack }: { id: number; onBack: () =>
               </SimpleGrid>
             </Tabs.Panel>
 
-            <Tabs.Panel value="academics" p="lg"><Text c="dimmed" ta="center" py="xl">Exam scores, grades and promotion history will appear here.</Text></Tabs.Panel>
+            <Tabs.Panel value="academics" p="lg"><StudentAcademicsTab studentId={id} /></Tabs.Panel>
             <Tabs.Panel value="cocurricular" p="lg"><Text c="dimmed" ta="center" py="xl">Club memberships and sports participation will appear here.</Text></Tabs.Panel>
             <Tabs.Panel value="documents" p="lg"><StudentDocumentsTab studentId={id} /></Tabs.Panel>
           </Tabs>

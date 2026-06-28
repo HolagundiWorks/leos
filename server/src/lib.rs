@@ -428,6 +428,38 @@ fn dispatch(
             return with_auth(state, token, |_| student_document_get(state, id));
         }
     }
+    // Academic marks.
+    if method == &Method::Get && path == "/student-marks" {
+        return with_auth(state, token, |_| student_marks_list(state, url));
+    }
+    if method == &Method::Post && path == "/student-marks" {
+        return with_auth(state, token, |_| student_mark_add(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/student-marks/") && path.ends_with("/delete") {
+        let id_str = &path["/student-marks/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| student_mark_delete(state, id));
+        }
+    }
+    // Board-exam registration.
+    if method == &Method::Get && path == "/board-registrations" {
+        return with_auth(state, token, |_| board_regs_list(state, url));
+    }
+    if method == &Method::Post && path == "/board-registrations" {
+        return with_auth(state, token, |_| board_reg_save(state, body, None));
+    }
+    if method == &Method::Post && path.starts_with("/board-registrations/") && path.ends_with("/update") {
+        let id_str = &path["/board-registrations/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| board_reg_save(state, body, Some(id)));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/board-registrations/") && path.ends_with("/delete") {
+        let id_str = &path["/board-registrations/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| board_reg_delete(state, id));
+        }
+    }
     if method == &Method::Get && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_get(state));
     }
@@ -1744,6 +1776,16 @@ fn migrate_schema(conn: &Connection) {
     // Per-student documents repository (base64 file blobs: PDF / image).
     let _ = conn.execute(
         "CREATE TABLE IF NOT EXISTS student_documents(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, doc_type TEXT, file_name TEXT, mime TEXT, data TEXT, verified INTEGER DEFAULT 0, uploaded_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    // Academic performance: per-subject assessment scores.
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS student_marks(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, term TEXT, subject TEXT, max_marks REAL, marks REAL, grade TEXT, remarks TEXT, recorded_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    // CBSE board-exam registration (LOC / admit card lifecycle).
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS board_registrations(id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, exam_year TEXT, registration_no TEXT, loc_status TEXT, admit_card_status TEXT, board_subjects TEXT, notes TEXT, updated_at TEXT DEFAULT (datetime('now')))",
         [],
     );
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
@@ -7147,6 +7189,136 @@ fn student_document_verify(state: &AppState, id: i64, body: &str) -> (u16, Value
 fn student_document_delete(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let _ = conn.execute("DELETE FROM student_documents WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+// ---- Academic marks ----
+
+fn student_marks_list(state: &AppState, url: &str) -> (u16, Value) {
+    let student_id: i64 = match q_param(url, "student_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "student_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, term, subject, max_marks, marks, grade, remarks FROM student_marks WHERE student_id=?1 ORDER BY id DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map(params![student_id], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "term": r.get::<_, Option<String>>(1)?,
+                "subject": r.get::<_, Option<String>>(2)?,
+                "max_marks": r.get::<_, Option<f64>>(3)?,
+                "marks": r.get::<_, Option<f64>>(4)?,
+                "grade": r.get::<_, Option<String>>(5)?,
+                "remarks": r.get::<_, Option<String>>(6)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"marks": rows, "total": rows.len()}))
+}
+
+fn student_mark_add(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let student_id = match v["student_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "student_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO student_marks(student_id, term, subject, max_marks, marks, grade, remarks) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        params![
+            student_id,
+            v["term"].as_str().filter(|s| !s.is_empty()),
+            v["subject"].as_str().filter(|s| !s.is_empty()),
+            v["max_marks"].as_f64(),
+            v["marks"].as_f64(),
+            v["grade"].as_str().filter(|s| !s.is_empty()),
+            v["remarks"].as_str().filter(|s| !s.is_empty()),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn student_mark_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM student_marks WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+// ---- CBSE board-exam registration ----
+
+fn board_regs_list(state: &AppState, url: &str) -> (u16, Value) {
+    let student_id: i64 = match q_param(url, "student_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "student_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, exam_year, registration_no, loc_status, admit_card_status, board_subjects, notes FROM board_registrations WHERE student_id=?1 ORDER BY id DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map(params![student_id], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "exam_year": r.get::<_, Option<String>>(1)?,
+                "registration_no": r.get::<_, Option<String>>(2)?,
+                "loc_status": r.get::<_, Option<String>>(3)?,
+                "admit_card_status": r.get::<_, Option<String>>(4)?,
+                "board_subjects": r.get::<_, Option<String>>(5)?,
+                "notes": r.get::<_, Option<String>>(6)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"registrations": rows, "total": rows.len()}))
+}
+
+fn board_reg_save(state: &AppState, body: &str, id: Option<i64>) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    let p = (
+        v["exam_year"].as_str().filter(|s| !s.is_empty()),
+        v["registration_no"].as_str().filter(|s| !s.is_empty()),
+        v["loc_status"].as_str().filter(|s| !s.is_empty()),
+        v["admit_card_status"].as_str().filter(|s| !s.is_empty()),
+        v["board_subjects"].as_str().filter(|s| !s.is_empty()),
+        v["notes"].as_str().filter(|s| !s.is_empty()),
+    );
+    if let Some(id) = id {
+        let _ = conn.execute(
+            "UPDATE board_registrations SET exam_year=?1, registration_no=?2, loc_status=?3, admit_card_status=?4, board_subjects=?5, notes=?6, updated_at=datetime('now') WHERE id=?7",
+            params![p.0, p.1, p.2, p.3, p.4, p.5, id],
+        );
+        (200, json!({"ok": true, "id": id}))
+    } else {
+        let student_id = match v["student_id"].as_i64() {
+            Some(x) => x,
+            None => return (422, json!({"error": "student_id required"})),
+        };
+        match conn.execute(
+            "INSERT INTO board_registrations(student_id, exam_year, registration_no, loc_status, admit_card_status, board_subjects, notes) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+            params![student_id, p.0, p.1, p.2, p.3, p.4, p.5],
+        ) {
+            Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+            Err(e) => (500, json!({"error": format!("{e}")})),
+        }
+    }
+}
+
+fn board_reg_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM board_registrations WHERE id=?1", params![id]);
     (200, json!({"ok": true}))
 }
 

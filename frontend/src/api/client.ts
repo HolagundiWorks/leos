@@ -585,6 +585,50 @@ export function deleteStudentDocument(token: string, id: number) {
   return req<{ ok: boolean }>(`/student-documents/${id}/delete`, { method: 'POST', token, body: {} });
 }
 
+// ─── Academic marks ─────────────────────────────────────────────────────────
+export interface StudentMark {
+  id: number;
+  term: string | null;
+  subject: string | null;
+  max_marks: number | null;
+  marks: number | null;
+  grade: string | null;
+  remarks: string | null;
+}
+export function fetchStudentMarks(token: string, studentId: number) {
+  return req<{ marks: StudentMark[]; total: number }>(`/student-marks?student_id=${studentId}`, { token });
+}
+export function addStudentMark(token: string, data: { student_id: number; term: string; subject: string; max_marks?: number; marks?: number; grade?: string; remarks?: string }) {
+  return req<{ ok: boolean; id: number }>('/student-marks', { method: 'POST', token, body: data });
+}
+export function deleteStudentMark(token: string, id: number) {
+  return req<{ ok: boolean }>(`/student-marks/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
+// ─── CBSE board-exam registration ───────────────────────────────────────────
+export interface BoardRegistration {
+  id: number;
+  exam_year: string | null;
+  registration_no: string | null;
+  loc_status: string | null;
+  admit_card_status: string | null;
+  board_subjects: string | null;
+  notes: string | null;
+}
+export function fetchBoardRegistrations(token: string, studentId: number) {
+  return req<{ registrations: BoardRegistration[]; total: number }>(`/board-registrations?student_id=${studentId}`, { token });
+}
+export function saveBoardRegistration(
+  token: string,
+  data: { student_id?: number; exam_year?: string; registration_no?: string; loc_status?: string; admit_card_status?: string; board_subjects?: string; notes?: string },
+  id?: number,
+) {
+  return req<{ ok: boolean; id: number }>(id ? `/board-registrations/${id}/update` : '/board-registrations', { method: 'POST', token, body: data });
+}
+export function deleteBoardRegistration(token: string, id: number) {
+  return req<{ ok: boolean }>(`/board-registrations/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
 export interface Section {
   id: number;
   name: string | null;
