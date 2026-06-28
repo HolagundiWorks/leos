@@ -44,6 +44,7 @@ import { HardwareScreen } from './components/HardwareScreen';
 import { DesignScreen } from './components/DesignScreen';
 import { TechAdminScreen } from './components/TechAdminScreen';
 import { ServerControlScreen } from './components/ServerControlScreen';
+import { ServerControlFooter } from './components/ServerControlFooter';
 import { RoleDashboard } from './components/RoleDashboard';
 import { Placeholder } from './components/Placeholder';
 
@@ -57,11 +58,15 @@ export function App() {
   const [studentId, setStudentId] = useState<number | null>(null);
 
   // Gate 1: open a school file. Gate 2: sign in.
+  // The ServerControlFooter is rendered in BOTH gates too: if the backend hangs
+  // you can't open a school file or sign in, so the recovery controls must be
+  // reachable here (they talk to the Service Manager over Tauri IPC, not HTTP).
   if (!schoolOpened) {
     return (
       <>
         <BackgroundLayer />
         <WelcomeScreen />
+        <ServerControlFooter />
       </>
     );
   }
@@ -71,6 +76,7 @@ export function App() {
       <>
         <BackgroundLayer />
         <LoginPage />
+        <ServerControlFooter />
       </>
     );
   }
@@ -196,6 +202,7 @@ export function App() {
       >
         {screen}
       </CockpitShell>
+      <ServerControlFooter onOpenPanel={() => navigate('server-control')} />
     </>
   );
 }

@@ -34,6 +34,16 @@ the same.
 | Logs | `server_logs` | Last N lines of backend stdout/stderr (ring buffer, 500) |
 | Auto-restart | `server_set_autostart` | Supervisor relaunches the backend if it crashes (≤5×, resets on health) |
 
+## Always-reachable recovery (footer)
+
+The full Server Control panel lives behind the login gate — but logging in needs
+the backend (`/auth/login`). If the backend hangs you could never reach the panel
+to fix it. So a compact **server-status pill is rendered at the App root, in the
+Welcome and Login gates too** (`ServerControlFooter`, bottom-left). It polls
+status and offers Restart / Repair / Start / Stop directly over Tauri IPC, so the
+backend can be recovered from anywhere — even before sign-in, even with a dialog
+open (it sits above modals). It turns red when the backend is unhealthy.
+
 ## Supervisor states
 
 `stopped → starting → running` on success; `running → crashed` on unexpected
