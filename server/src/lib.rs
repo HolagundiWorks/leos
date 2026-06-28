@@ -189,6 +189,12 @@ fn dispatch(
             return with_auth(state, token, |_| student_audit(state, id));
         }
     }
+    if method == &Method::Get && path.starts_with("/students/") && path.ends_with("/attendance") {
+        let id_str = &path["/students/".len()..path.len() - "/attendance".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| student_attendance_overall(state, id));
+        }
+    }
     if method == &Method::Post && path.starts_with("/students/") && path.ends_with("/advance-lock") {
         let id_str = &path["/students/".len()..path.len() - "/advance-lock".len()];
         if let Ok(id) = id_str.parse::<i64>() {
@@ -1024,6 +1030,9 @@ fn dispatch(
     }
     if method == &Method::Get && path == "/attendance/alerts" {
         return with_auth(state, token, |_| attendance_alerts(state));
+    }
+    if method == &Method::Post && path == "/attendance/warn" {
+        return require_level(state, token, 3, |uid| attendance_warn(state, uid, body));
     }
     if method == &Method::Post && path == "/leosdb/save" {
         return with_auth(state, token, |_| leosdb_save(body));
@@ -5485,6 +5494,49 @@ fn attendance_alerts(state: &AppState) -> (u16, Value) {
     };
     let total = rows.len();
     (200, json!({"alerts": rows, "total": total}))
+}
+
+// Per-student overall attendance % + CBSE board-eligibility status (75% rule).
+fn student_attendance_overall(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let (attended, total): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(CASE WHEN status IN ('present','late') THEN 1 END), COUNT(id) FROM student_attendance WHERE student_id=?1",
+            params![id],
+            |r| Ok((r.get::<_, Option<i64>>(0)?.unwrap_or(0), r.get::<_, Option<i64>>(1)?.unwrap_or(0))),
+        )
+        .unwrap_or((0, 0));
+    let pct = if total > 0 { attended as f64 / total as f64 * 100.0 } else { 0.0 };
+    let status = if total < 5 { "Insufficient data" } else if pct >= 75.0 { "Eligible" } else { "At risk" };
+    (200, json!({
+        "attended": attended,
+        "total": total,
+        "attendance_pct": (pct * 10.0).round() / 10.0,
+        "status": status,
+        "threshold": 75,
+    }))
+}
+
+// Log an attendance-shortage warning to the parent communication log + audit it.
+fn attendance_warn(state: &AppState, actor: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let student_id = match v["student_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "student_id required"})),
+    };
+    let pct = v["attendance_pct"].as_f64();
+    let msg = match pct {
+        Some(p) => format!("Attendance is {p}%, below the 75% required for board-exam eligibility. Please ensure regular attendance."),
+        None => "Attendance is below the 75% required for board-exam eligibility. Please ensure regular attendance.".to_string(),
+    };
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "INSERT INTO student_communications(student_id, channel, direction, subject, body) VALUES(?1, 'Circular', 'Outgoing', 'Attendance shortage — board eligibility', ?2)",
+        params![student_id, msg],
+    );
+    let detail = json!({"attendance_pct": pct, "rule": "CBSE 75%"}).to_string();
+    audit_write(&conn, actor, "attendance.warn", "student", Some(student_id), Some(&detail));
+    (200, json!({"ok": true}))
 }
 
 // ---- .leosdb portable archive (ZIP: manifest + school.sqlite + media/docs) ----

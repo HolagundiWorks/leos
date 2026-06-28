@@ -729,6 +729,35 @@ export function deleteComplianceCert(token: string, id: number) {
   return req<{ ok: boolean }>(`/compliance-certs/${id}/delete`, { method: 'POST', token, body: {} });
 }
 
+// ─── Attendance compliance / board eligibility (CBSE 75% rule) ───────────────
+export interface AttendanceAlert {
+  student_id: number;
+  first_name: string | null;
+  last_name: string | null;
+  section_id: number;
+  section_name: string | null;
+  class_name: string | null;
+  attended: number;
+  total: number;
+  attendance_pct: number;
+}
+export interface StudentAttendance {
+  attended: number;
+  total: number;
+  attendance_pct: number;
+  status: 'Eligible' | 'At risk' | 'Insufficient data';
+  threshold: number;
+}
+export function fetchAttendanceAlerts(token: string) {
+  return req<{ alerts: AttendanceAlert[]; total: number }>('/attendance/alerts', { token });
+}
+export function fetchStudentAttendance(token: string, studentId: number) {
+  return req<StudentAttendance>(`/students/${studentId}/attendance`, { token });
+}
+export function warnAttendance(token: string, studentId: number, attendancePct: number) {
+  return req<{ ok: boolean }>('/attendance/warn', { method: 'POST', token, body: { student_id: studentId, attendance_pct: attendancePct } });
+}
+
 export interface Section {
   id: number;
   name: string | null;

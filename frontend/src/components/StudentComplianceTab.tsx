@@ -2,9 +2,9 @@ import {
   Badge, Button, Card, Group, Stack, Stepper, Text, ThemeIcon, Timeline,
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { History, Lock, ShieldCheck } from 'lucide-react';
+import { GraduationCap, History, Lock, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../stores/auth';
-import { advanceLock, fetchStudentAudit, fetchStudent, LOCK_STAGES, type AuditEntry } from '../api/client';
+import { advanceLock, fetchStudentAudit, fetchStudent, fetchStudentAttendance, LOCK_STAGES, type AuditEntry } from '../api/client';
 
 const ACTION_LABEL: Record<string, { label: string; color: string }> = {
   'student.update': { label: 'Field edited', color: 'sky' },
@@ -27,6 +27,7 @@ export function StudentComplianceTab({ studentId }: { studentId: number }) {
   const qc = useQueryClient();
   const { data: student } = useQuery({ queryKey: ['student', studentId], queryFn: () => fetchStudent(token, studentId) });
   const { data: audit } = useQuery({ queryKey: ['student-audit', studentId], queryFn: () => fetchStudentAudit(token, studentId) });
+  const { data: att } = useQuery({ queryKey: ['student-attendance', studentId], queryFn: () => fetchStudentAttendance(token, studentId) });
 
   const lockState = student?.lock_state || 'Draft';
   const activeIdx = Math.max(0, LOCK_STAGES.indexOf(lockState as (typeof LOCK_STAGES)[number]));
@@ -42,8 +43,28 @@ export function StudentComplianceTab({ studentId }: { studentId: number }) {
 
   const history = audit?.history ?? [];
 
+  const attColor = att?.status === 'Eligible' ? 'mint' : att?.status === 'At risk' ? 'red' : 'gray';
+
   return (
     <Stack gap="xl">
+      {att && (
+        <Card withBorder padding="md">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <ThemeIcon variant="light" color={attColor} radius="xl"><GraduationCap size={16} /></ThemeIcon>
+              <div>
+                <Text fw={600} size="sm">Board-exam eligibility (CBSE 75% rule)</Text>
+                <Text size="xs" c="dimmed">{att.total > 0 ? `${att.attended} of ${att.total} periods attended` : 'No attendance recorded yet'}</Text>
+              </div>
+            </Group>
+            <Group gap="sm">
+              {att.total > 0 && <Text fw={700} size="lg" c={attColor}>{att.attendance_pct}%</Text>}
+              <Badge color={attColor} variant="light">{att.status}</Badge>
+            </Group>
+          </Group>
+        </Card>
+      )}
+
       <Card withBorder padding="lg">
         <Group justify="space-between" mb="md">
           <Group gap="sm">

@@ -51,6 +51,7 @@ import { SportsScreen } from './components/SportsScreen';
 import { ClubsScreen } from './components/ClubsScreen';
 import { ReceiptsScreen } from './components/ReceiptsScreen';
 import { ComplianceCertsScreen } from './components/ComplianceCertsScreen';
+import { BoardEligibilityScreen } from './components/BoardEligibilityScreen';
 import { RoleDashboard } from './components/RoleDashboard';
 import { Placeholder } from './components/Placeholder';
 
@@ -199,6 +200,8 @@ export function App() {
     screen = <ReceiptsScreen />;
   } else if (active === 'compliance-certs') {
     screen = <ComplianceCertsScreen />;
+  } else if (active === 'board-eligibility') {
+    screen = <BoardEligibilityScreen onViewStudent={setStudentId} />;
   } else if (active === 'floorplan') {
     screen = <FloorPlanScreen />;
   } else if (active === 'academic-year') {

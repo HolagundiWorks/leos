@@ -315,6 +315,7 @@ export const ribbonTabs: RibbonTab[] = [
         label: 'Compliance',
         actions: [
           { key: 'compliance-certs', label: 'Certificates & Safety', icon: ShieldCheck, accessLevel: 2 },
+          { key: 'board-eligibility', label: 'Board Eligibility', icon: GraduationCap, accessLevel: 2 },
         ],
       },
       {
