@@ -48,6 +48,7 @@ import {
   Server,
   Mail,
   Award,
+  Trophy,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -256,6 +257,7 @@ export const ribbonTabs: RibbonTab[] = [
         label: 'Activities',
         actions: [
           { key: 'activities', label: 'Field Visits', icon: Bus, accessLevel: 2 },
+          { key: 'sports', label: 'Sports', icon: Trophy, accessLevel: 2 },
         ],
       },
       {

@@ -345,6 +345,34 @@ fn dispatch(
     if method == &Method::Post && path == "/certificates" {
         return with_auth(state, token, |_| certificate_create(state, body));
     }
+    // Sports OS: scheduling, results, leaderboard.
+    if method == &Method::Get && path == "/sports/events" {
+        return with_auth(state, token, |_| sports_events_list(state));
+    }
+    if method == &Method::Post && path == "/sports/events" {
+        return with_auth(state, token, |_| sports_event_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/sports/events/") && path.ends_with("/delete") {
+        let id_str = &path["/sports/events/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| sports_event_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/sports/leaderboard" {
+        return with_auth(state, token, |_| sports_leaderboard(state));
+    }
+    if method == &Method::Get && path == "/sports/results" {
+        return with_auth(state, token, |_| sports_results_list(state, url));
+    }
+    if method == &Method::Post && path == "/sports/results" {
+        return with_auth(state, token, |_| sports_result_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/sports/results/") && path.ends_with("/delete") {
+        let id_str = &path["/sports/results/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| sports_result_delete(state, id));
+        }
+    }
     if method == &Method::Get && path == "/floorplan" {
         return with_auth(state, token, |_| floorplan_get(state));
     }
@@ -1652,6 +1680,15 @@ fn migrate_schema(conn: &Connection) {
     );
     let _ = conn.execute(
         "CREATE TABLE IF NOT EXISTS certificates(id INTEGER PRIMARY KEY AUTOINCREMENT, serial TEXT, cert_type TEXT, student_id INTEGER, student_name TEXT, title TEXT, body TEXT, issued_date TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    // Sports: scheduled events/fixtures + results (points feed the leaderboard).
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS sports_events(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sport TEXT, event_date TEXT, event_time TEXT, venue TEXT, notes TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS sports_results(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER, participant TEXT, house TEXT, position INTEGER, points INTEGER DEFAULT 0, note TEXT, created_at TEXT DEFAULT (datetime('now')))",
         [],
     );
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
@@ -6643,6 +6680,157 @@ fn certificate_create(state: &AppState, body: &str) -> (u16, Value) {
         Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid(), "serial": serial})),
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
+}
+
+// ---- Sports OS: scheduling, records, leaderboard ----
+
+fn sports_events_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT e.id, e.name, e.sport, e.event_date, e.event_time, e.venue, e.notes,
+                (SELECT COUNT(*) FROM sports_results r WHERE r.event_id = e.id)
+         FROM sports_events e ORDER BY e.event_date DESC, e.event_time",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map([], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "name": r.get::<_, Option<String>>(1)?,
+                "sport": r.get::<_, Option<String>>(2)?,
+                "event_date": r.get::<_, Option<String>>(3)?,
+                "event_time": r.get::<_, Option<String>>(4)?,
+                "venue": r.get::<_, Option<String>>(5)?,
+                "notes": r.get::<_, Option<String>>(6)?,
+                "result_count": r.get::<_, i64>(7)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"events": rows, "total": rows.len()}))
+}
+
+fn sports_event_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "name required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO sports_events(name, sport, event_date, event_time, venue, notes) VALUES(?1,?2,?3,?4,?5,?6)",
+        params![
+            name,
+            v["sport"].as_str().filter(|s| !s.is_empty()),
+            v["event_date"].as_str().filter(|s| !s.is_empty()),
+            v["event_time"].as_str().filter(|s| !s.is_empty()),
+            v["venue"].as_str().filter(|s| !s.is_empty()),
+            v["notes"].as_str().filter(|s| !s.is_empty()),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn sports_event_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM sports_results WHERE event_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM sports_events WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+fn sports_results_list(state: &AppState, url: &str) -> (u16, Value) {
+    let event_id: i64 = match q_param(url, "event_id").and_then(|v| v.parse().ok()) {
+        Some(id) => id,
+        None => return (422, json!({"error": "event_id required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT id, participant, house, position, points, note FROM sports_results WHERE event_id=?1 ORDER BY position, points DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map(params![event_id], |r| {
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "participant": r.get::<_, Option<String>>(1)?,
+                "house": r.get::<_, Option<String>>(2)?,
+                "position": r.get::<_, Option<i64>>(3)?,
+                "points": r.get::<_, Option<i64>>(4)?,
+                "note": r.get::<_, Option<String>>(5)?,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"results": rows, "total": rows.len()}))
+}
+
+fn sports_result_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let event_id = match v["event_id"].as_i64() {
+        Some(x) => x,
+        None => return (422, json!({"error": "event_id required"})),
+    };
+    let participant = match v["participant"].as_str().filter(|s| !s.is_empty()) {
+        Some(p) => p.to_string(),
+        None => return (422, json!({"error": "participant required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO sports_results(event_id, participant, house, position, points, note) VALUES(?1,?2,?3,?4,?5,?6)",
+        params![
+            event_id,
+            participant,
+            v["house"].as_str().filter(|s| !s.is_empty()),
+            v["position"].as_i64(),
+            v["points"].as_i64().unwrap_or(0),
+            v["note"].as_str().filter(|s| !s.is_empty()),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn sports_result_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM sports_results WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+/// Leaderboard: total points per house, and the top participants.
+fn sports_leaderboard(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let houses: Vec<Value> = conn
+        .prepare(
+            "SELECT house, SUM(points) AS pts, COUNT(*) AS n FROM sports_results
+             WHERE house IS NOT NULL AND house != '' GROUP BY house ORDER BY pts DESC",
+        )
+        .and_then(|mut s| {
+            s.query_map([], |r| {
+                Ok(json!({"house": r.get::<_, String>(0)?, "points": r.get::<_, i64>(1)?, "entries": r.get::<_, i64>(2)?}))
+            })
+            .map(|m| m.filter_map(|x| x.ok()).collect())
+        })
+        .unwrap_or_default();
+    let participants: Vec<Value> = conn
+        .prepare(
+            "SELECT participant, SUM(points) AS pts, COUNT(*) AS n FROM sports_results
+             WHERE participant IS NOT NULL AND participant != '' GROUP BY participant ORDER BY pts DESC LIMIT 20",
+        )
+        .and_then(|mut s| {
+            s.query_map([], |r| {
+                Ok(json!({"participant": r.get::<_, String>(0)?, "points": r.get::<_, i64>(1)?, "entries": r.get::<_, i64>(2)?}))
+            })
+            .map(|m| m.filter_map(|x| x.ok()).collect())
+        })
+        .unwrap_or_default();
+    (200, json!({"houses": houses, "participants": participants}))
 }
 
 // ---- floor plan (canvas layout persisted as JSON) ----

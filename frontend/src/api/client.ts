@@ -351,6 +351,59 @@ export function createCertificate(
   return req<{ ok: boolean; id: number; serial: string }>('/certificates', { method: 'POST', token, body: data });
 }
 
+// ─── Sports OS: scheduling, records, leaderboard ────────────────────────────
+export interface SportsEvent {
+  id: number;
+  name: string | null;
+  sport: string | null;
+  event_date: string | null;
+  event_time: string | null;
+  venue: string | null;
+  notes: string | null;
+  result_count: number;
+}
+export interface SportsResult {
+  id: number;
+  participant: string | null;
+  house: string | null;
+  position: number | null;
+  points: number | null;
+  note: string | null;
+}
+export interface LeaderRow {
+  house?: string;
+  participant?: string;
+  points: number;
+  entries: number;
+}
+export function fetchSportsEvents(token: string) {
+  return req<{ events: SportsEvent[]; total: number }>('/sports/events', { token });
+}
+export function createSportsEvent(
+  token: string,
+  data: { name: string; sport?: string; event_date?: string; event_time?: string; venue?: string; notes?: string },
+) {
+  return req<{ ok: boolean; id: number }>('/sports/events', { method: 'POST', token, body: data });
+}
+export function deleteSportsEvent(token: string, id: number) {
+  return req<{ ok: boolean }>(`/sports/events/${id}/delete`, { method: 'POST', token, body: {} });
+}
+export function fetchSportsResults(token: string, eventId: number) {
+  return req<{ results: SportsResult[]; total: number }>(`/sports/results?event_id=${eventId}`, { token });
+}
+export function createSportsResult(
+  token: string,
+  data: { event_id: number; participant: string; house?: string; position?: number | null; points?: number; note?: string },
+) {
+  return req<{ ok: boolean; id: number }>('/sports/results', { method: 'POST', token, body: data });
+}
+export function deleteSportsResult(token: string, id: number) {
+  return req<{ ok: boolean }>(`/sports/results/${id}/delete`, { method: 'POST', token, body: {} });
+}
+export function fetchLeaderboard(token: string) {
+  return req<{ houses: LeaderRow[]; participants: LeaderRow[] }>('/sports/leaderboard', { token });
+}
+
 export interface Section {
   id: number;
   name: string | null;
