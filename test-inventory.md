@@ -30,7 +30,7 @@ create / read / update / delete-or-archive.
 | **Students** | `StudentsScreen`, `StudentFormModal`, `StudentProfileScreen` | `GET/POST /students`, `GET /students/:id`, `POST /students/:id/update` | C R U | ✅ E, ✅ A, ✅ D |
 | Staff | `StaffScreen`, `StaffFormModal` | `GET/POST /staff`, `POST /staff/:id/update` | C R U | ✅ E, ✅ A, ✅ D |
 | Staff OS / HR | `StaffOSScreen` | leave / HR routes | — | ⬜ |
-| Courses | `CoursesScreen` (read-only UI⚠️) | `GET/POST /courses`, `/courses/:id/update`, `/courses/:id/delete` | C R U D | ✅ A, ✅ D · UI list-only |
+| Courses | `CoursesScreen` | `GET/POST /courses`, `/courses/:id/update`, `/courses/:id/delete` | C R U D | ✅ A, ✅ D · UI now full CRUD |
 | Subjects | `SubjectsScreen` | `GET/POST /subjects`, `/subjects/:id/update`, `/delete` | C R U D | ✅ E, ✅ A, ✅ D |
 | Classes/Sections | `ClassesScreen` | `GET/POST /classes`, `/sections`, update/delete | C R U D | ✅ E, ✅ A, ✅ D |
 | Classrooms | `ClassroomsScreen` | `GET /classrooms` | C R U D | ⬜ |
@@ -65,15 +65,11 @@ create / read / update / delete-or-archive.
 
 ---
 
-> ⚠️ **Finding — Courses UI is read-only.** The backend fully supports course
-> create/update/delete (`/courses`, `/courses/:id/update`, `/courses/:id/delete`,
-> all tested), but `CoursesScreen.tsx` only lists courses — there is no create,
-> edit, or delete control. Courses appear to be created only as a side effect of
-> the Subjects "Course / stream" picker. Confirm whether course management UI is
-> intended before production. (Not filed as a bug — may be by design.)
+> ✅ **Resolved — Courses UI now has full CRUD** (New Course + per-row edit/delete
+> in `CoursesScreen.tsx`), matching the backend.
 >
-> Note — Subjects delete (trash icon) deletes **immediately with no confirmation
-> dialog**; easy to mis-click. Consider a confirm step.
+> Note — Subjects/Courses delete (trash icon) deletes **immediately with no
+> confirmation dialog**; easy to mis-click. Consider a confirm step.
 
 ## 3. Cross-cutting flows
 
