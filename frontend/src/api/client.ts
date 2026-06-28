@@ -447,6 +447,52 @@ export function deleteExamArchive(token: string, id: number) {
   return req<{ ok: boolean }>(`/exam-archives/${id}/delete`, { method: 'POST', token, body: {} });
 }
 
+// ─── Practical-exam SOP + mark locking ──────────────────────────────────────
+export interface PracticalExam {
+  id: number;
+  subject: string | null;
+  class_name: string | null;
+  exam_date: string | null;
+  batch: string | null;
+  internal_examiner: string | null;
+  external_examiner: string | null;
+  lab: string | null;
+  max_marks: number | null;
+  marks_locked: boolean;
+  locked_at: string | null;
+  geo: string | null;
+  has_evidence: boolean;
+  marks_count: number;
+  status: 'Scheduled' | 'Marks uploaded' | 'Locked';
+}
+export interface PracticalMark { id: number; student_name: string | null; marks: number | null }
+export interface PracticalExamInput {
+  subject: string; class_name?: string; exam_date?: string; batch?: string;
+  internal_examiner?: string; external_examiner?: string; lab?: string;
+  max_marks?: number; evidence?: string; geo?: string; notes?: string;
+}
+export function fetchPracticalExams(token: string) {
+  return req<{ exams: PracticalExam[]; total: number }>('/practical-exams', { token });
+}
+export function fetchPracticalExam(token: string, id: number) {
+  return req<{ exam: PracticalExam & { evidence: string | null; notes: string | null }; marks: PracticalMark[] }>(`/practical-exams/${id}`, { token });
+}
+export function addPracticalExam(token: string, data: PracticalExamInput) {
+  return req<{ ok: boolean; id: number }>('/practical-exams', { method: 'POST', token, body: data });
+}
+export function addPracticalMark(token: string, examId: number, data: { student_name: string; marks?: number }) {
+  return req<{ ok: boolean; id: number }>(`/practical-exams/${examId}/marks`, { method: 'POST', token, body: data });
+}
+export function deletePracticalMark(token: string, examId: number, markId: number) {
+  return req<{ ok: boolean }>(`/practical-exams/${examId}/marks/${markId}/delete`, { method: 'POST', token, body: {} });
+}
+export function lockPracticalExam(token: string, id: number) {
+  return req<{ ok: boolean; marks_locked: boolean }>(`/practical-exams/${id}/lock`, { method: 'POST', token, body: {} });
+}
+export function deletePracticalExam(token: string, id: number) {
+  return req<{ ok: boolean }>(`/practical-exams/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
 // ─── Letters & Certificates (document generation) ───────────────────────────
 export interface Letter {
   id: number;

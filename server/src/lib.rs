@@ -513,6 +513,46 @@ fn dispatch(
             return with_auth(state, token, |_| exam_archive_get(state, id));
         }
     }
+    // Practical-exam SOP.
+    if method == &Method::Get && path == "/practical-exams" {
+        return with_auth(state, token, |_| practical_exams_list(state, url));
+    }
+    if method == &Method::Post && path == "/practical-exams" {
+        return require_level(state, token, 2, |_| practical_exam_add(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/practical-exams/") && path.ends_with("/lock") {
+        let id_str = &path["/practical-exams/".len()..path.len() - "/lock".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return require_level(state, token, 2, |uid| practical_exam_lock(state, id, uid));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/practical-exams/") && path.ends_with("/marks") {
+        let id_str = &path["/practical-exams/".len()..path.len() - "/marks".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return require_level(state, token, 2, |_| practical_mark_add(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/practical-exams/") && path.ends_with("/delete") {
+        let id_str = &path["/practical-exams/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return require_level(state, token, 2, |_| practical_exam_delete(state, id));
+        }
+    }
+    // /practical-exams/:eid/marks/:mid/delete
+    if method == &Method::Post && path.starts_with("/practical-exams/") && path.contains("/marks/") && path.ends_with("/delete") {
+        let rest = &path["/practical-exams/".len()..];
+        let parts: Vec<&str> = rest.split('/').collect();
+        if parts.len() == 4 && parts[1] == "marks" && parts[3] == "delete" {
+            if let (Ok(eid), Ok(mid)) = (parts[0].parse::<i64>(), parts[2].parse::<i64>()) {
+                return require_level(state, token, 2, |_| practical_mark_delete(state, eid, mid));
+            }
+        }
+    }
+    if method == &Method::Get && path.starts_with("/practical-exams/") {
+        if let Ok(id) = path["/practical-exams/".len()..].parse::<i64>() {
+            return with_auth(state, token, |_| practical_exam_detail(state, id));
+        }
+    }
     // Compliance certificates (school safety + staff) with expiry tracking.
     if method == &Method::Get && path == "/compliance-certs" {
         return with_auth(state, token, |_| compliance_certs_list(state, url));
@@ -2094,6 +2134,15 @@ fn migrate_schema(conn: &Connection) {
     // Exam archive with CBSE retention policy (retain till Sept of next AY).
     let _ = conn.execute(
         "CREATE TABLE IF NOT EXISTS exam_archives(id INTEGER PRIMARY KEY AUTOINCREMENT, academic_year TEXT, exam_name TEXT, material_type TEXT, subject TEXT, class_name TEXT, document TEXT, retention_until TEXT, disposed INTEGER DEFAULT 0, disposed_at TEXT, notes TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    // Practical-exam SOP: examiner mapping, geo/photo evidence, mark locking.
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS practical_exams(id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT, class_name TEXT, exam_date TEXT, batch TEXT, internal_examiner TEXT, external_examiner TEXT, lab TEXT, max_marks REAL, evidence TEXT, geo TEXT, marks_locked INTEGER DEFAULT 0, locked_at TEXT, notes TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS practical_marks(id INTEGER PRIMARY KEY AUTOINCREMENT, practical_exam_id INTEGER NOT NULL, student_name TEXT, marks REAL, created_at TEXT DEFAULT (datetime('now')))",
         [],
     );
     let _ = conn.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT", []);
@@ -7989,6 +8038,171 @@ fn exam_archive_dispose(state: &AppState, id: i64, actor: i64) -> (u16, Value) {
 fn exam_archive_delete(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let _ = conn.execute("DELETE FROM exam_archives WHERE id=?1", params![id]);
+    (200, json!({"ok": true}))
+}
+
+// ---- Practical-exam SOP (examiner mapping, evidence, mark locking) ----
+
+fn practical_exams_list(state: &AppState, url: &str) -> (u16, Value) {
+    let _ = url;
+    let conn = state.conn.lock().unwrap();
+    let mut stmt = match conn.prepare(
+        "SELECT p.id, p.subject, p.class_name, p.exam_date, p.batch, p.internal_examiner, p.external_examiner, p.lab,
+                p.max_marks, p.marks_locked, p.locked_at, p.geo,
+                CASE WHEN p.evidence IS NULL OR p.evidence='' THEN 0 ELSE 1 END,
+                (SELECT COUNT(*) FROM practical_marks pm WHERE pm.practical_exam_id = p.id)
+         FROM practical_exams p ORDER BY p.exam_date DESC, p.id DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let rows: Vec<Value> = stmt
+        .query_map([], |r| {
+            let locked = r.get::<_, Option<i64>>(9)?.unwrap_or(0) == 1;
+            let marks_count: i64 = r.get(13)?;
+            let status = if locked { "Locked" } else if marks_count > 0 { "Marks uploaded" } else { "Scheduled" };
+            Ok(json!({
+                "id": r.get::<_, i64>(0)?,
+                "subject": r.get::<_, Option<String>>(1)?,
+                "class_name": r.get::<_, Option<String>>(2)?,
+                "exam_date": r.get::<_, Option<String>>(3)?,
+                "batch": r.get::<_, Option<String>>(4)?,
+                "internal_examiner": r.get::<_, Option<String>>(5)?,
+                "external_examiner": r.get::<_, Option<String>>(6)?,
+                "lab": r.get::<_, Option<String>>(7)?,
+                "max_marks": r.get::<_, Option<f64>>(8)?,
+                "marks_locked": locked,
+                "locked_at": r.get::<_, Option<String>>(10)?,
+                "geo": r.get::<_, Option<String>>(11)?,
+                "has_evidence": r.get::<_, i64>(12)? == 1,
+                "marks_count": marks_count,
+                "status": status,
+            }))
+        })
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    (200, json!({"exams": rows, "total": rows.len()}))
+}
+
+fn practical_exam_detail(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let exam = conn.query_row(
+        "SELECT id, subject, class_name, exam_date, batch, internal_examiner, external_examiner, lab, max_marks, marks_locked, locked_at, geo, evidence, notes FROM practical_exams WHERE id=?1",
+        params![id],
+        |r| Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "subject": r.get::<_, Option<String>>(1)?,
+            "class_name": r.get::<_, Option<String>>(2)?,
+            "exam_date": r.get::<_, Option<String>>(3)?,
+            "batch": r.get::<_, Option<String>>(4)?,
+            "internal_examiner": r.get::<_, Option<String>>(5)?,
+            "external_examiner": r.get::<_, Option<String>>(6)?,
+            "lab": r.get::<_, Option<String>>(7)?,
+            "max_marks": r.get::<_, Option<f64>>(8)?,
+            "marks_locked": r.get::<_, Option<i64>>(9)?.unwrap_or(0) == 1,
+            "locked_at": r.get::<_, Option<String>>(10)?,
+            "geo": r.get::<_, Option<String>>(11)?,
+            "evidence": r.get::<_, Option<String>>(12)?,
+            "notes": r.get::<_, Option<String>>(13)?,
+        })),
+    );
+    let mut exam = match exam {
+        Ok(e) => e,
+        Err(_) => return (404, json!({"error": "practical exam not found"})),
+    };
+    let mut stmt = match conn.prepare("SELECT id, student_name, marks FROM practical_marks WHERE practical_exam_id=?1 ORDER BY id") {
+        Ok(s) => s,
+        Err(e) => return (500, json!({"error": format!("{e}")})),
+    };
+    let marks: Vec<Value> = stmt
+        .query_map(params![id], |r| Ok(json!({"id": r.get::<_, i64>(0)?, "student_name": r.get::<_, Option<String>>(1)?, "marks": r.get::<_, Option<f64>>(2)?})))
+        .map(|m| m.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+    // Mirror the list's derived status onto the detail.
+    if let Value::Object(ref mut m) = exam {
+        let locked = m.get("marks_locked").and_then(|v| v.as_bool()).unwrap_or(false);
+        let status = if locked { "Locked" } else if !marks.is_empty() { "Marks uploaded" } else { "Scheduled" };
+        m.insert("status".into(), json!(status));
+    }
+    (200, json!({"exam": exam, "marks": marks}))
+}
+
+fn practical_exam_add(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO practical_exams(subject, class_name, exam_date, batch, internal_examiner, external_examiner, lab, max_marks, evidence, geo, notes) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+        params![
+            v["subject"].as_str().filter(|s| !s.is_empty()),
+            v["class_name"].as_str().filter(|s| !s.is_empty()),
+            v["exam_date"].as_str().filter(|s| !s.is_empty()),
+            v["batch"].as_str().filter(|s| !s.is_empty()),
+            v["internal_examiner"].as_str().filter(|s| !s.is_empty()),
+            v["external_examiner"].as_str().filter(|s| !s.is_empty()),
+            v["lab"].as_str().filter(|s| !s.is_empty()),
+            v["max_marks"].as_f64(),
+            v["evidence"].as_str().filter(|s| !s.is_empty()),
+            v["geo"].as_str().filter(|s| !s.is_empty()),
+            v["notes"].as_str().filter(|s| !s.is_empty()),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+// Add a student's practical mark — rejected once the exam is locked.
+fn practical_mark_add(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    let locked: bool = conn
+        .query_row("SELECT marks_locked FROM practical_exams WHERE id=?1", params![id], |r| r.get::<_, Option<i64>>(0))
+        .ok()
+        .flatten()
+        .unwrap_or(0)
+        == 1;
+    if locked {
+        return (423, json!({"error": "marks are locked and cannot be changed"}));
+    }
+    let _ = conn.execute(
+        "INSERT INTO practical_marks(practical_exam_id, student_name, marks) VALUES(?1,?2,?3)",
+        params![id, v["student_name"].as_str().filter(|s| !s.is_empty()), v["marks"].as_f64()],
+    );
+    (201, json!({"ok": true, "id": conn.last_insert_rowid()}))
+}
+
+fn practical_mark_delete(state: &AppState, exam_id: i64, mark_id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let locked: bool = conn
+        .query_row("SELECT marks_locked FROM practical_exams WHERE id=?1", params![exam_id], |r| r.get::<_, Option<i64>>(0))
+        .ok()
+        .flatten()
+        .unwrap_or(0)
+        == 1;
+    if locked {
+        return (423, json!({"error": "marks are locked and cannot be changed"}));
+    }
+    let _ = conn.execute("DELETE FROM practical_marks WHERE id=?1 AND practical_exam_id=?2", params![mark_id, exam_id]);
+    (200, json!({"ok": true}))
+}
+
+// Irreversibly lock the practical marks (audited) — CBSE: no changes after upload.
+fn practical_exam_lock(state: &AppState, id: i64, actor: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let n = conn
+        .execute("UPDATE practical_exams SET marks_locked=1, locked_at=datetime('now') WHERE id=?1 AND marks_locked=0", params![id])
+        .unwrap_or(0);
+    if n == 0 {
+        return (409, json!({"error": "already locked or not found"}));
+    }
+    audit_write(&conn, actor, "practical.lock", "practical_exam", Some(id), None);
+    (200, json!({"ok": true, "marks_locked": true}))
+}
+
+fn practical_exam_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM practical_marks WHERE practical_exam_id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM practical_exams WHERE id=?1", params![id]);
     (200, json!({"ok": true}))
 }
 

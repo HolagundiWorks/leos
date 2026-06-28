@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
   Archive,
   Globe,
+  FlaskConical,
   Users,
   Building2,
   Banknote,
@@ -322,6 +323,7 @@ export const ribbonTabs: RibbonTab[] = [
           { key: 'statutory-returns', label: 'OASIS / UDISE', icon: FileSpreadsheet, accessLevel: 2 },
           { key: 'exam-archive', label: 'Exam Archive', icon: Archive, accessLevel: 2 },
           { key: 'public-disclosure', label: 'Public Disclosure', icon: Globe, accessLevel: 2 },
+          { key: 'practical-exams', label: 'Practical Exams', icon: FlaskConical, accessLevel: 2 },
         ],
       },
       {
