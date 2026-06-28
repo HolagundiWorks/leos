@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge,
   Button,
@@ -19,8 +19,11 @@ import { Mail, Printer } from 'lucide-react';
 import { useAuth } from '../stores/auth';
 import { createLetter, fetchLetters, fetchSchool } from '../api/client';
 import { letterHtml, printHtml } from '../lib/printDoc';
+import { makeQr } from '../lib/qr';
 
 const today = () => new Date().toISOString().slice(0, 10);
+const letterQrText = (school: string, ref: string, date: string, subject: string) =>
+  `LEOS LETTER\nSchool: ${school}\nRef: ${ref}\nDate: ${date}\nSubject: ${subject}`;
 
 export function LetterScreen() {
   const token = useAuth((s) => s.token)!;
@@ -32,6 +35,7 @@ export function LetterScreen() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [date, setDate] = useState(today());
+  const [qrPreview, setQrPreview] = useState('');
 
   const head = {
     name: school?.name ?? 'Your School',
@@ -41,14 +45,21 @@ export function LetterScreen() {
     signature: school?.signature,
   };
 
-  const print = (refNo: string) =>
-    printHtml(letterHtml(head, { ref_no: refNo, date, recipient, subject, body }));
+  // Live preview QR (draft — final one on save carries the real ref).
+  useEffect(() => {
+    void makeQr(letterQrText(head.name, '(on save)', date, subject || '…')).then(setQrPreview);
+  }, [head.name, date, subject]);
+
+  const print = async (refNo: string) => {
+    const qr = await makeQr(letterQrText(head.name, refNo, date, subject));
+    printHtml(letterHtml(head, { ref_no: refNo, date, recipient, subject, body, qr }));
+  };
 
   const save = useMutation({
     mutationFn: () => createLetter(token, { recipient, subject, body, letter_date: date }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       qc.invalidateQueries({ queryKey: ['letters'] });
-      print(res.ref_no);
+      await print(res.ref_no);
     },
   });
 
@@ -82,11 +93,17 @@ export function LetterScreen() {
           {/* Live letterhead preview */}
           <Card withBorder data-testid="letter-preview">
             <Stack gap={2} style={{ fontFamily: 'Georgia, serif', color: '#1a1a1a' }}>
-              <div style={{ textAlign: 'center', borderBottom: '3px double #1f3a5f', paddingBottom: 8 }}>
-                {head.logo && <img src={head.logo} alt="logo" style={{ height: 48, marginBottom: 4 }} />}
-                <Text fw={700} size="lg" style={{ color: '#1f3a5f' }}>{head.name}</Text>
-                {head.address && <Text size="xs" c="dimmed">{head.address}</Text>}
-                <Text size="xs" style={{ letterSpacing: '.18em', textTransform: 'uppercase', color: '#1f3a5f' }}>Office of the Principal</Text>
+              <div style={{ paddingBottom: 8 }}>
+                <Group justify="space-between" align="center" wrap="nowrap" gap="sm">
+                  <div style={{ width: 48 }}>{head.logo && <img src={head.logo} alt="logo" style={{ height: 44 }} />}</div>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <Text fw={700} size="lg" style={{ color: '#11365f' }}>{head.name}</Text>
+                    {head.address && <Text size="xs" c="dimmed">{head.address}</Text>}
+                    <Text size="xs" fw={600} style={{ letterSpacing: '.2em', textTransform: 'uppercase', color: '#9a7b1f' }}>Office of the Principal</Text>
+                  </div>
+                  <div style={{ width: 48, textAlign: 'right' }}>{qrPreview && <img src={qrPreview} alt="verify" style={{ width: 44, height: 44 }} />}</div>
+                </Group>
+                <div style={{ height: 3, marginTop: 4, borderRadius: 2, background: 'linear-gradient(90deg,#11365f,#9a7b1f 55%,#11365f)' }} />
               </div>
               <Group justify="space-between" mt="sm">
                 <Text size="xs" c="dimmed">Ref: (on save)</Text>
@@ -118,7 +135,10 @@ export function LetterScreen() {
                   <Table.Td><Text size="sm" lineClamp={1}>{l.subject}</Text></Table.Td>
                   <Table.Td>
                     <Button size="compact-xs" variant="subtle" leftSection={<Printer size={12} />}
-                      onClick={() => printHtml(letterHtml(head, { ref_no: l.ref_no ?? '', date: l.letter_date ?? '', recipient: l.recipient ?? '', subject: l.subject ?? '', body: l.body ?? '' }))}>
+                      onClick={async () => {
+                        const qr = await makeQr(letterQrText(head.name, l.ref_no ?? '', l.letter_date ?? '', l.subject ?? ''));
+                        printHtml(letterHtml(head, { ref_no: l.ref_no ?? '', date: l.letter_date ?? '', recipient: l.recipient ?? '', subject: l.subject ?? '', body: l.body ?? '', qr }));
+                      }}>
                       Print
                     </Button>
                   </Table.Td>

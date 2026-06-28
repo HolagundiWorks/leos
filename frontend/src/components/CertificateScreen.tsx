@@ -21,8 +21,11 @@ import { Award, Printer } from 'lucide-react';
 import { useAuth } from '../stores/auth';
 import { createCertificate, fetchCertificates, fetchSchool, fetchStudents } from '../api/client';
 import { certificateHtml, printHtml } from '../lib/printDoc';
+import { makeQr } from '../lib/qr';
 
 const today = () => new Date().toISOString().slice(0, 10);
+const certQrText = (school: string, serial: string, name: string, title: string, date: string) =>
+  `LEOS CERTIFICATE\nSchool: ${school}\nSerial: ${serial}\nName: ${name}\nAward: ${title}\nDate: ${date}`;
 
 // Certificate types → title + a body template ({d} = the "details" field).
 const TYPES: { value: string; label: string; title: string; tmpl: (d: string) => string; hint: string }[] = [
@@ -47,6 +50,7 @@ export function CertificateScreen() {
   const [body, setBody] = useState('');
   const [date, setDate] = useState(today());
   const [touched, setTouched] = useState(false);
+  const [qrPreview, setQrPreview] = useState('');
 
   const def = TYPES.find((t) => t.value === type)!;
 
@@ -70,15 +74,22 @@ export function CertificateScreen() {
     certBg: school?.cert_bg,
   };
 
-  const buildPrint = (serial: string, who: string, t: string, b: string, d: string) =>
-    printHtml(certificateHtml(head, { serial, date: d, type, title: t, studentName: who, body: b }));
+  // Live preview QR (draft; the real serial is embedded on issue).
+  useEffect(() => {
+    void makeQr(certQrText(head.name, '(on issue)', studentName || '…', def.title, date)).then(setQrPreview);
+  }, [head.name, studentName, def.title, date]);
+
+  const buildPrint = async (serial: string, who: string, t: string, b: string, d: string) => {
+    const qr = await makeQr(certQrText(head.name, serial, who, t, d));
+    printHtml(certificateHtml(head, { serial, date: d, type, title: t, studentName: who, body: b, qr }));
+  };
 
   const issue = useMutation({
     mutationFn: () =>
       createCertificate(token, { cert_type: type, student_name: studentName, student_id: matchedId, title: def.title, body, issued_date: date }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       qc.invalidateQueries({ queryKey: ['certificates'] });
-      buildPrint(res.serial, studentName, def.title, body, date);
+      await buildPrint(res.serial, studentName, def.title, body, date);
     },
   });
 
@@ -122,6 +133,7 @@ export function CertificateScreen() {
               <Text size="sm" mt={4}>{body || def.tmpl(detail)}</Text>
               <Group justify="space-between" align="flex-end" mt="xl">
                 <Text size="xs" c="dimmed" ta="left">Serial: (on issue)<br />Date: {date}</Text>
+                {qrPreview && <div style={{ textAlign: 'center' }}><img src={qrPreview} alt="verify" style={{ width: 48, height: 48 }} /><Text size="9px" c="dimmed">Scan to verify</Text></div>}
                 <div style={{ textAlign: 'center' }}>
                   {head.signature && <img src={head.signature} alt="signature" style={{ height: 32, display: 'block', margin: '0 auto 2px' }} />}
                   <Text size="xs" style={{ borderTop: '1px solid #333', paddingTop: 4 }}>{head.principalName || 'Principal'}<br />Principal</Text>

@@ -29,30 +29,46 @@ export interface Letterhead {
 }
 
 /** A4 letter on the principal's letterhead. */
-export function letterHtml(s: Letterhead, l: { ref_no?: string; date: string; recipient?: string; subject: string; body: string }) {
+export function letterHtml(
+  s: Letterhead,
+  l: { ref_no?: string; date: string; recipient?: string; subject: string; body: string; qr?: string },
+) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(l.subject)}</title>
   <style>
-    @page { size: A4; margin: 18mm; }
-    body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; line-height: 1.55; }
-    .head { text-align:center; border-bottom: 3px double #1f3a5f; padding-bottom: 10px; margin-bottom: 6px; }
-    .school { font-size: 26px; font-weight: 700; color:#1f3a5f; letter-spacing:.5px; }
-    .addr { font-size: 12px; color:#555; }
-    .office { font-size: 12px; letter-spacing:.18em; text-transform:uppercase; color:#1f3a5f; margin-top:4px; }
-    .meta { display:flex; justify-content:space-between; font-size:13px; margin:18px 0 22px; }
-    .subject { text-align:center; font-weight:700; text-decoration:underline; margin: 12px 0 16px; }
+    @page { size: A4; margin: 16mm; }
+    body { font-family: 'Garamond', Georgia, 'Times New Roman', serif; color: #1a1a1a; line-height: 1.6; }
+    .head { display:flex; align-items:center; gap:14px; padding-bottom: 8px; }
+    .head .logo { width:74px; flex-shrink:0; }
+    .head .logo img { width:74px; height:auto; }
+    .masthead { flex:1; text-align:center; }
+    .school { font-size: 27px; font-weight: 700; color:#11365f; letter-spacing:.6px; }
+    .addr { font-size: 11.5px; color:#555; margin-top:2px; }
+    .office { font-size: 11px; letter-spacing:.22em; text-transform:uppercase; color:#9a7b1f; margin-top:5px; font-weight:600; }
+    .head .qr { width:74px; flex-shrink:0; text-align:right; }
+    .head .qr img { width:64px; height:64px; }
+    .rule { height:3px; background: linear-gradient(90deg,#11365f 0%,#9a7b1f 55%,#11365f 100%); border-radius:2px; margin: 4px 0 2px; }
+    .rule.thin { height:1px; background:#c9b878; margin-top:3px; }
+    .meta { display:flex; justify-content:space-between; font-size:12.5px; color:#333; margin:20px 0 22px; }
+    .subject { text-align:center; font-weight:700; margin: 14px 0 16px; }
+    .subject u { text-decoration-color:#9a7b1f; }
     .body p { margin: 0 0 12px; text-align: justify; }
-    .sign { margin-top: 48px; }
+    .sign { margin-top: 46px; }
     .pname { font-weight:700; margin-top: 40px; }
+    .foot { position: fixed; bottom: 8mm; left:0; right:0; text-align:center; font-size:10px; color:#888; border-top:1px solid #e3dcc4; padding-top:4px; }
   </style></head><body>
     <div class="head">
-      ${s.logo ? `<img src="${s.logo}" style="height:64px;margin-bottom:6px" alt="logo"/>` : ''}
-      <div class="school">${esc(s.name)}</div>
-      ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
-      <div class="office">Office of the Principal</div>
+      <div class="logo">${s.logo ? `<img src="${s.logo}" alt="logo"/>` : ''}</div>
+      <div class="masthead">
+        <div class="school">${esc(s.name)}</div>
+        ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
+        <div class="office">Office of the Principal</div>
+      </div>
+      <div class="qr">${l.qr ? `<img src="${l.qr}" alt="verify"/>` : ''}</div>
     </div>
-    <div class="meta"><span>Ref: ${esc(l.ref_no ?? '—')}</span><span>Date: ${esc(l.date)}</span></div>
+    <div class="rule"></div><div class="rule thin"></div>
+    <div class="meta"><span><b>Ref:</b> ${esc(l.ref_no ?? '—')}</span><span><b>Date:</b> ${esc(l.date)}</span></div>
     ${l.recipient ? `<div>${paras(l.recipient)}</div>` : ''}
-    <div class="subject">Subject: ${esc(l.subject)}</div>
+    <div class="subject"><u>Subject: ${esc(l.subject)}</u></div>
     <div class="body">${paras(l.body)}</div>
     <div class="sign">
       <div>Yours sincerely,</div>
@@ -60,6 +76,7 @@ export function letterHtml(s: Letterhead, l: { ref_no?: string; date: string; re
       <div class="pname"${s.signature ? ' style="margin-top:6px"' : ''}>${esc(s.principalName || '')}</div>
       <div>Principal, ${esc(s.name)}</div>
     </div>
+    ${l.ref_no ? `<div class="foot">This is a computer-generated letter from ${esc(s.name)}. Scan the QR to verify · Ref ${esc(l.ref_no)}</div>` : ''}
   </body></html>`;
 }
 
@@ -103,7 +120,7 @@ export function receiptHtml(
 /** Landscape, bordered certificate. */
 export function certificateHtml(
   s: Letterhead,
-  c: { serial?: string; date: string; type: string; title: string; studentName: string; body: string },
+  c: { serial?: string; date: string; type: string; title: string; studentName: string; body: string; qr?: string },
 ) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(c.title)}</title>
   <style>
@@ -137,6 +154,7 @@ export function certificateHtml(
       </div>
       <div class="foot">
         <div style="text-align:left">Serial: ${esc(c.serial ?? '—')}<br/>Date: ${esc(c.date)}</div>
+        ${c.qr ? `<div style="text-align:center"><img src="${c.qr}" style="width:70px;height:70px" alt="verify"/><div style="font-size:9px;color:#777">Scan to verify</div></div>` : ''}
         <div class="sigline">${s.signature ? `<img src="${s.signature}" style="height:40px;display:block;margin:0 auto 2px" alt="signature"/>` : ''}${esc(s.principalName || '')}<br/>Principal</div>
       </div>
     </div></div>

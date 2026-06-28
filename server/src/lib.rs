@@ -1852,9 +1852,16 @@ fn init_db(conn: &Connection) {
 }
 
 fn seed(conn: &Connection) {
+    // Demo branding so the demo account has a professional letterhead out of the
+    // box (logo + principal signature, base64 SVG data URLs).
+    const DEMO_LOGO: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIj48Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSI1NiIgZmlsbD0iIzFmM2E1ZiIvPjxjaXJjbGUgY3g9IjYwIiBjeT0iNjAiIHI9IjU2IiBmaWxsPSJub25lIiBzdHJva2U9IiNiODg2MGIiIHN0cm9rZS13aWR0aD0iNCIvPjx0ZXh0IHg9IjYwIiB5PSI3NCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMzQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlNvQTwvdGV4dD48L3N2Zz4=";
+    const DEMO_SIGN: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iODAiPjx0ZXh0IHg9IjE0IiB5PSI1MiIgZm9udC1mYW1pbHk9IlNlZ29lIFNjcmlwdCxjdXJzaXZlIiBmb250LXNpemU9IjM0IiBmb250LXN0eWxlPSJpdGFsaWMiIGZpbGw9IiMxMTM2NmIiPkEuIFJhbzwvdGV4dD48L3N2Zz4=";
     conn.execute(
-        "INSERT INTO schools(name, academic_year, type) VALUES(?1, ?2, ?3)",
-        params!["School Of Architecture", "2026-27", "school"],
+        "INSERT INTO schools(name, academic_year, type, address, principal_name, logo, signature) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            "School Of Architecture", "2026-27", "school",
+            "24 Lakeview Avenue, Bengaluru 560001", "Dr. A. Rao", DEMO_LOGO, DEMO_SIGN,
+        ],
     )
     .unwrap();
 
