@@ -26,13 +26,13 @@ import { SetupPage } from './pages/SetupPage';
 
 type Page = 'timetable' | 'timings' | 'subjects' | 'teachers' | 'teacher-map' | 'setup';
 
-const NAV: { key: Page; label: string; icon: typeof Calendar; desc: string }[] = [
-  { key: 'timetable', label: 'Timetable', icon: LayoutGrid, desc: 'Build section schedules' },
-  { key: 'timings', label: 'School Timings', icon: Clock, desc: 'Periods & breaks' },
-  { key: 'subjects', label: 'Subjects', icon: BookOpen, desc: 'Subject catalog & quotas' },
-  { key: 'teachers', label: 'Teachers', icon: Users, desc: 'Staff directory' },
-  { key: 'teacher-map', label: 'Teacher Map', icon: UserCheck, desc: 'Subject assignments' },
-  { key: 'setup', label: 'Classes', icon: GraduationCap, desc: 'Classes & sections' },
+const NAV: { key: Page; label: string; icon: typeof Calendar }[] = [
+  { key: 'timetable', label: 'Timetable', icon: LayoutGrid },
+  { key: 'timings', label: 'School Timings', icon: Clock },
+  { key: 'subjects', label: 'Subjects', icon: BookOpen },
+  { key: 'teachers', label: 'Teachers', icon: Users },
+  { key: 'teacher-map', label: 'Teacher Map', icon: UserCheck },
+  { key: 'setup', label: 'Classes', icon: GraduationCap },
 ];
 
 export function App() {

@@ -16,14 +16,13 @@ import { AlarmClock, CalendarDays, CalendarHeart, ClipboardList, Plus } from 'lu
 import { ApiError } from '../api/client';
 import { useStaff } from '../hooks/useStaff';
 import { useAuth } from '../stores/auth';
+import { TASK_TAGS } from '../lib/tags';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 
 type Kind = 'event' | 'meeting' | 'task' | 'reminder';
 
 const MEETING_TYPES = ['department', 'staff', 'parent', 'government', 'board', 'other'];
-// Shared tag set used by both tasks and reminders.
-export const TAGS = ['critical', 'urgent', 'normal'];
 
 const KIND_TITLE: Record<Kind, string> = {
   event: 'Create Event',
@@ -58,7 +57,7 @@ function tagSelect(value: string, onChange: (v: string) => void) {
   return (
     <Select
       label="Tag"
-      data={TAGS.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
+      data={TASK_TAGS.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
       value={value}
       onChange={(v) => onChange(v ?? 'normal')}
       allowDeselect={false}

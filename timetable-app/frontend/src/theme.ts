@@ -52,5 +52,3 @@ export const theme = createTheme({
     Badge: Badge.extend({ defaultProps: { radius: 'sm', variant: 'light' } }),
   },
 });
-
-export type AccentColor = 'brand' | 'sky' | 'mint' | 'peach' | 'lavender' | 'yellow';

@@ -1,11 +1,9 @@
 import type { Role } from './roles';
 
-/** Current signed-in user, normally injected from the PHP session. */
+/** Current signed-in user. */
 export interface SessionUser {
   name: string;
   role: Role;
-  avatarUrl?: string;
-  email?: string;
 }
 
 export function initials(name: string): string {

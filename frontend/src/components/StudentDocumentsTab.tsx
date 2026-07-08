@@ -9,21 +9,13 @@ import {
   addStudentDocument, deleteStudentDocument, fetchStudentDocument, fetchStudentDocuments,
   verifyStudentDocument,
 } from '../api/client';
+import { MAX_UPLOAD_BYTES, readAsDataUrl } from '../lib/fileData';
 
 const DOC_TYPES = [
   'Birth Certificate', 'Aadhaar Card', 'Transfer Certificate', 'Migration Certificate',
   'Passport Photo', 'Parent ID Proof', 'Address Proof', 'Income Certificate',
   'Caste Certificate', 'Medical Certificate', 'Disability Certificate', 'Board Registration', 'Other',
 ];
-const MAX_BYTES = 3 * 1024 * 1024; // 3 MB
-
-const readAsDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onerror = () => reject(new Error('read failed'));
-    r.onload = () => resolve(r.result as string);
-    r.readAsDataURL(file);
-  });
 
 export function StudentDocumentsTab({ studentId }: { studentId: number }) {
   const token = useAuth((s) => s.token)!;
@@ -48,7 +40,7 @@ export function StudentDocumentsTab({ studentId }: { studentId: number }) {
   const pick = (file?: File) => {
     setError(null);
     if (!file) return;
-    if (file.size > MAX_BYTES) { setError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — please keep documents under 3 MB.`); return; }
+    if (file.size > MAX_UPLOAD_BYTES) { setError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — please keep documents under 3 MB.`); return; }
     add.mutate(file);
   };
 

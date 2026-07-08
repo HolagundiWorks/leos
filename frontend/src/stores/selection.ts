@@ -11,7 +11,7 @@ interface SelectionState {
   clear: () => void;
 }
 
-// Current row selection — drives the bottom context ribbon (guide §12).
+// Current row selection — highlights the active record in list screens.
 export const useSelection = create<SelectionState>((set) => ({
   student: null,
   selectStudent: (id, name) => set({ student: { id, name } }),

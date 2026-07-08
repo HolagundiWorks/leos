@@ -17,12 +17,8 @@ import type { Student } from '../api/client';
 import { useStudents } from '../hooks/useStudents';
 import { useSelection } from '../stores/selection';
 import { initials } from '../types';
-import { accentColors, type AccentColor } from '../theme';
+import { avatarColorFor } from '../lib/avatarColor';
 import { StudentFormModal } from './StudentFormModal';
-
-function colorFor(id: number): AccentColor {
-  return accentColors[id % accentColors.length];
-}
 
 function StudentRow({
   s,
@@ -47,7 +43,7 @@ function StudentRow({
     >
       <Group justify="space-between" wrap="nowrap">
         <Group wrap="nowrap" gap="md" style={{ minWidth: 0 }}>
-          <Avatar radius="xl" color={colorFor(s.id)} variant="light">
+          <Avatar radius="xl" color={avatarColorFor(s.id)} variant="light">
             {initials(name)}
           </Avatar>
           <div style={{ minWidth: 0 }}>

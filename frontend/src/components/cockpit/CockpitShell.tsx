@@ -11,7 +11,6 @@ interface CockpitShellProps {
   user: SessionUser;
   active: string;
   onNavigate: (key: string) => void;
-  onViewStudent?: (id: number) => void;
   children: ReactNode;
 }
 

@@ -1,8 +1,12 @@
 {
   "name": "leos-tests",
-  "private": true,
   "version": "0.1.0",
   "type": "module",
+  "license": "GPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HolagundiWorks/leos.git"
+  },
   "description": "LEOS automated test suite — Playwright (browser-mode E2E) + Vitest (API & DB) against an isolated local server.",
   "scripts": {
     "test": "npm run test:api && npm run test:db && npm run test:e2e",

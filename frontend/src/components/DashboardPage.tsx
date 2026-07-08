@@ -16,7 +16,7 @@ import { Calendar } from '@mantine/dates';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Building2, CalendarClock, CalendarHeart, ChevronRight, CircleAlert, ClipboardList, Flame, GraduationCap, Info, Layers, PartyPopper, UserCheck, Users, Wallet } from 'lucide-react';
 import dayjs from 'dayjs';
-import type { IconComponent } from '../icons';
+import type { LucideIcon } from 'lucide-react';
 import type { AccentColor } from '../theme';
 import { ApiError, type WorkItem } from '../api/client';
 import { useDashboardToday } from '../hooks/useDashboardToday';
@@ -45,7 +45,7 @@ const TAG_COLOR: Record<string, AccentColor> = {
 };
 const tagColor = (t: string | null): AccentColor => TAG_COLOR[t ?? 'normal'] ?? 'sky';
 
-const SEV: Record<WorkItem['severity'], { color: AccentColor; Icon: IconComponent }> = {
+const SEV: Record<WorkItem['severity'], { color: AccentColor; Icon: LucideIcon }> = {
   danger: { color: 'peach', Icon: CircleAlert },
   warning: { color: 'yellow', Icon: AlertTriangle },
   info: { color: 'sky', Icon: Info },
@@ -109,7 +109,7 @@ function StatCards({ stats, onNavigate }: { stats: DashStats; onNavigate: (m: st
 // ─── Agenda card (one category) ─────────────────────────────────────────────────
 function AgendaCard({
   label, Icon, color, items, onNavigate,
-}: { label: string; Icon: IconComponent; color: AccentColor; items: AgendaItem[]; onNavigate: (m: string) => void }) {
+}: { label: string; Icon: LucideIcon; color: AccentColor; items: AgendaItem[]; onNavigate: (m: string) => void }) {
   return (
     <Card p="sm" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Group justify="space-between" mb={6} wrap="nowrap">
@@ -188,7 +188,7 @@ function AgendaSection({ token, onNavigate }: { token: string; onNavigate: (m: s
 function FocusCard({
   label, Icon, color, items, mode, onNavigate,
 }: {
-  label: string; Icon: IconComponent; color: AccentColor; items: FocusItem[];
+  label: string; Icon: LucideIcon; color: AccentColor; items: FocusItem[];
   mode: 'tag' | 'due'; onNavigate: (m: string) => void;
 }) {
   const today = dayjs().startOf('day');

@@ -20,10 +20,10 @@ import { AlarmClock, Check, Plus, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { ApiError } from '../api/client';
 import { useAuth } from '../stores/auth';
+import { TASK_TAGS } from '../lib/tags';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 
-const TAGS = ['critical', 'urgent', 'normal'];
 const tagColor = (t: string | null) => (t === 'critical' ? 'red' : t === 'urgent' ? 'orange' : 'brand');
 
 interface Reminder {
@@ -157,7 +157,7 @@ export function RemindersScreen() {
           <Group grow>
             <Select
               label="Tag"
-              data={TAGS.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
+              data={TASK_TAGS.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
               value={form.tag}
               onChange={(v) => setForm((f) => ({ ...f, tag: v ?? 'normal' }))}
               allowDeselect={false}

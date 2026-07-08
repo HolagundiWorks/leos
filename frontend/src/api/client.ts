@@ -20,13 +20,6 @@ export interface ApiUser {
   name: string;
 }
 
-export interface DashboardSummary {
-  students: number;
-  staff: number;
-  schools: number;
-  courses: number;
-}
-
 interface ReqOpts {
   method?: string;
   token?: string | null;
@@ -61,19 +54,6 @@ export function login(username: string, password: string) {
     method: 'POST',
     body: { username, password },
   });
-}
-
-export async function fetchMe(token: string) {
-  const { user } = await req<{ user: ApiUser }>('/auth/me', { token });
-  return user;
-}
-
-export async function fetchDashboardSummary(token: string) {
-  const { summary } = await req<{ summary: DashboardSummary }>(
-    '/dashboard/summary',
-    { token },
-  );
-  return summary;
 }
 
 export interface WorkItem {

@@ -231,7 +231,6 @@ export function App() {
         user={sessionUser}
         active={active}
         onNavigate={navigate}
-        onViewStudent={setStudentId}
       >
         {screen}
       </CockpitShell>

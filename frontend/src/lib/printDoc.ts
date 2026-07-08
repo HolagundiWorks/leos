@@ -19,7 +19,7 @@ const esc = (s: string) =>
 const paras = (body: string) =>
   esc(body).split(/\n{2,}/).map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`).join('');
 
-export interface Letterhead {
+interface Letterhead {
   name: string;
   address?: string | null;
   principalName?: string | null;

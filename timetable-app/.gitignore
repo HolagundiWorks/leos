@@ -1,1 +1,4 @@
 node_modules/
+release/
+frontend/dist/
+*.tsbuildinfo

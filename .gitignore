@@ -4,9 +4,14 @@
 # Source drop for background art (runtime copies live in frontend/public/bg/).
 /animated bg/
 
-# HCW-SMS React/Mantine UI — deps and build artifacts (run `npm run build`).
+# LEOS React/Mantine UI — deps and build artifacts (run `npm run build`).
 /frontend/node_modules/
 /frontend/dist/
+
+# Timetable Manager sub-app (Electron + Vite + Express).
+/timetable-app/node_modules/
+/timetable-app/release/
+/timetable-app/frontend/dist/
 
 # Rust build output (standalone server + Tauri) and Tauri codegen.
 /server/target/

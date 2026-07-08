@@ -86,7 +86,7 @@ use (e.g. Service if installed, else child process).
 
 ## Packaging note (production)
 
-The child-process backend needs `leos-server.exe` shipped next to `LEOS.exe`.
-Configure it as a Tauri **sidecar** (`bundle.externalBin` in `tauri.conf.json`)
-or an installer resource. Until then, the embedded fallback keeps the app working
-from a single binary. Tracked alongside the installer tests in `test-plan.md`.
+The child-process backend ships as a Tauri **sidecar** (`bundle.externalBin` in
+`tauri.conf.json`, prepared by `scripts/prepare-build.mjs`). If the sidecar is
+missing at runtime, LEOS falls back to an in-process server (health/logs only).
+Tracked alongside the installer tests in `test-plan.md`.

@@ -28,14 +28,3 @@ export async function pickFolder(): Promise<string | null> {
     return null;
   }
 }
-
-/** Save-file dialog. Defaults to suggesting a .leosdb name. */
-export async function pickSave(defaultPath?: string, filters = LEOSDB_FILTER): Promise<string | null> {
-  try {
-    const { save } = await import('@tauri-apps/plugin-dialog');
-    const sel = await save({ defaultPath, filters });
-    return typeof sel === 'string' ? sel : null;
-  } catch {
-    return null;
-  }
-}

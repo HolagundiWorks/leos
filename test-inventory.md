@@ -104,7 +104,5 @@ Stable, intent-revealing, kebab-case. Patterns in use:
 
 **Rule for new UI:** every actionable control (button, input, dropdown, row,
 toggle, tab) that a test needs must carry a `data-testid`. Add it in the same PR
-as the feature. Already wired: the pre-app gates, Login, Students screen + modal,
-and the navigation ribbon. Adding testids to the remaining screens is the first
-step when extending coverage to each module above. Already wired: the pre-app
-gates, Login, Students, Staff, and the navigation ribbon.
+as the feature. Already wired: the pre-app gates, Login, Students, Staff, and
+the navigation ribbon.

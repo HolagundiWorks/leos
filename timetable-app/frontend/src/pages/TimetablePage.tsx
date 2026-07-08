@@ -18,12 +18,11 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronDown, ChevronUp, LayoutGrid, LayoutList } from 'lucide-react';
 import {
   ApiError,
   api,
-  type AllTimetableEntry,
   type TimetableEntry,
   type TimetableSection,
 } from '../api/client';
@@ -44,6 +43,13 @@ function shortName(name: string | null | undefined): string {
   if (!name) return '';
   const p = name.trim().split(/\s+/);
   return p.length === 1 ? p[0] : `${p[0]} ${p[p.length - 1][0]}.`;
+}
+
+function invalidateTimetableQueries(qc: QueryClient, sectionId: number) {
+  qc.invalidateQueries({ queryKey: ['timetable', sectionId] });
+  qc.invalidateQueries({ queryKey: ['timetable-quota', sectionId] });
+  qc.invalidateQueries({ queryKey: ['teacher-load'] });
+  qc.invalidateQueries({ queryKey: ['timetable-all'] });
 }
 
 interface ActiveCell {
@@ -157,12 +163,7 @@ function CellModal({ cell, sectionId, onClose }: { cell: ActiveCell; sectionId: 
     else if (staffId && !teacherOptions.find((t) => t.value === staffId)) setStaffId(null);
   }, [teacherOptions, staffId]);
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['timetable', sectionId] });
-    qc.invalidateQueries({ queryKey: ['timetable-quota', sectionId] });
-    qc.invalidateQueries({ queryKey: ['teacher-load'] });
-    qc.invalidateQueries({ queryKey: ['timetable-all'] });
-  };
+  const invalidate = () => invalidateTimetableQueries(qc, sectionId);
 
   const save = useMutation({
     mutationFn: () => api.setTimetableEntry({
@@ -287,12 +288,7 @@ function TimetableGrid({ sectionId, onCellClick }: { sectionId: number; onCellCl
 
   const periods = timingsData?.periods ?? [];
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['timetable', sectionId] });
-    qc.invalidateQueries({ queryKey: ['timetable-quota', sectionId] });
-    qc.invalidateQueries({ queryKey: ['teacher-load'] });
-    qc.invalidateQueries({ queryKey: ['timetable-all'] });
-  };
+  const invalidate = () => invalidateTimetableQueries(qc, sectionId);
 
   const moveEntry = useMutation({
     mutationFn: async ({ payload, toDay, toPeriodId }: { payload: DragPayload; toDay: number; toPeriodId: number }) => {
@@ -371,7 +367,7 @@ function SchoolWideGrid() {
   const { data: timingsData, isLoading: timingsLoading } = useQuery({ queryKey: ['periods'], queryFn: () => api.fetchPeriods() });
 
   const entryMap = useMemo(() => {
-    const m: Record<string, AllTimetableEntry> = {};
+    const m: Record<string, TimetableEntry> = {};
     for (const e of data?.entries ?? []) m[`${e.section_id}-${e.day_of_week}-${e.period_id}`] = e;
     return m;
   }, [data]);

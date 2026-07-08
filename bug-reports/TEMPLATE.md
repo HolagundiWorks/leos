@@ -8,7 +8,7 @@
 | **Module** | e.g. Students |
 | **Severity** | Blocker / Critical / Major / Minor / Trivial |
 | **Found by** | test file & name, or manual |
-| **LEOS version** | e.g. 0.2.0 |
+| **LEOS version** | e.g. 0.3.0 |
 | **Layer** | E2E / API / DB / Installer |
 
 ## Summary

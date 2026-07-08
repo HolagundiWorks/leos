@@ -86,7 +86,7 @@ Reports land in `tests/reports/` (HTML + JSON; screenshots/video on failure).
 ## 5. Installer tests (Windows) — planned
 
 Full install automation needs an elevated, sandboxed Windows runner. Planned
-checks: the NSIS/MSI bundle installs; the app launches; the embedded server
+checks: the NSIS/MSI bundle installs; the app launches; the `leos-server` sidecar
 answers `/health`; the data dir + `school.sqlite` are created; uninstall leaves
 user data unless explicitly removed. Until automated, run
 [`bug-reports/TEMPLATE.md`](bug-reports/TEMPLATE.md) for any manual install issue.
@@ -99,7 +99,7 @@ user data unless explicitly removed. Until automated, run
 vertical slice — login + Students CRUD across E2E/API/DB. This proves the pattern
 end-to-end so every other module is a copy-and-extend.
 
-**Next (⬜):** apply the same pattern to Staff, Attendance, Timetable, Exams,
-Fees, Events, Backup, Import/Export, and the permission matrix; add the
-Diagnostics screen and installer automation. Tracked in
+**Next (⬜):** extend coverage to Attendance, Timetable, Exams, Fees, Events,
+Backup, Import/Export, and the permission matrix; add the Diagnostics screen and
+installer automation. Staff and Subjects slices exist — see
 [`test-inventory.md`](test-inventory.md).

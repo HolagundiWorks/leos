@@ -68,4 +68,3 @@ The Students module (`tests/{e2e,api,db}`) is the reference example to copy.
 - **Playwright "browser not found"** → `npx playwright install chromium`.
 - **Native file-picker flows** can't be tested in the browser by design — cover
   the underlying endpoints (`/school/open`, `/schooldb/save`) via the API layer.
-```

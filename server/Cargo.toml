@@ -3,6 +3,8 @@ name = "leos-server"
 version = "0.1.0"
 edition = "2021"
 description = "LEOS local API server (SQLite, offline-first)"
+license = "GPL-2.0"
+repository = "https://github.com/HolagundiWorks/leos"
 
 [dependencies]
 tiny_http = "0.12"

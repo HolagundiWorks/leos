@@ -43,7 +43,7 @@ and `msi/LEOS_<ver>_x64_en-US.msi`.
 
 | Item | Status |
 |---|---|
-| Automated tests (59: API/DB/E2E) green | ✅ |
+| Automated test suite (API/DB/E2E) green | ✅ |
 | Server-side admin permission enforcement | ✅ (general write-route gating = phase 2) |
 | In-app Server Control Panel | ✅ |
 | Sidecar packaging (`externalBin` + prepare script) | ✅ |

@@ -97,10 +97,3 @@ export type AccentColor =
   | 'sand';
 // Categorical rotation for data elements: teal, blue, green, amber, rose, violet
 export const accentColors: AccentColor[] = ['brand', 'sky', 'mint', 'yellow', 'rose', 'lavender'];
-
-export const semantic = {
-  success: 'mint',
-  warning: 'yellow',
-  danger: 'peach',
-  info: 'brand',
-} as const;

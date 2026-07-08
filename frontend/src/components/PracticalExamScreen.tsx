@@ -10,10 +10,9 @@ import {
   addPracticalExam, addPracticalMark, deletePracticalExam, deletePracticalMark, fetchPracticalExam,
   fetchPracticalExams, lockPracticalExam, type PracticalExamInput,
 } from '../api/client';
+import { MAX_UPLOAD_BYTES, readAsDataUrl } from '../lib/fileData';
 
-const MAX_BYTES = 3 * 1024 * 1024;
 const STATUS: Record<string, string> = { Scheduled: 'sky', 'Marks uploaded': 'yellow', Locked: 'mint' };
-const readAsDataUrl = (file: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onerror = () => rej(new Error('x')); r.onload = () => res(r.result as string); r.readAsDataURL(file); });
 const blank = (): PracticalExamInput => ({ subject: '', class_name: '', exam_date: new Date().toISOString().slice(0, 10), batch: '', internal_examiner: '', external_examiner: '', lab: '', max_marks: 30, geo: '' });
 
 export function PracticalExamScreen() {
@@ -90,7 +89,7 @@ export function PracticalExamScreen() {
           </Stack>
         )}
       </Modal>
-      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.currentTarget.files?.[0]; if (f && f.size <= MAX_BYTES) readAsDataUrl(f).then((d) => { setEvidence(d); setEvName(f.name); }); e.currentTarget.value = ''; }} />
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.currentTarget.files?.[0]; if (f && f.size <= MAX_UPLOAD_BYTES) readAsDataUrl(f).then((d) => { setEvidence(d); setEvName(f.name); }); e.currentTarget.value = ''; }} />
 
       {openId !== null && <PracticalDetail examId={openId} onClose={() => setOpenId(null)} />}
     </Container>

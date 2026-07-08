@@ -1,14 +1,57 @@
 {
   "name": "timetable-app",
   "version": "1.0.0",
-  "private": true,
   "description": "Standalone timetable management app based on LEOS scheduling logic",
+  "license": "GPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HolagundiWorks/leos.git",
+    "directory": "timetable-app"
+  },
+  "main": "electron/main.mjs",
   "scripts": {
     "install:all": "npm install && npm install --prefix server && npm install --prefix frontend",
+    "rebuild:native": "npx @electron/rebuild -f -w better-sqlite3 -m server",
+    "rebuild:server": "npm rebuild better-sqlite3 --prefix server",
     "dev": "concurrently -n api,ui -c cyan,magenta \"npm run dev --prefix server\" \"npm run dev --prefix frontend\"",
-    "start": "concurrently -n api,ui -c cyan,magenta \"npm start --prefix server\" \"npm run preview --prefix frontend\""
+    "start": "concurrently -n api,ui -c cyan,magenta \"npm start --prefix server\" \"npm run preview --prefix frontend\"",
+    "desktop:dev": "concurrently -n api,ui,electron -c cyan,magenta,green \"npm run dev --prefix server\" \"npm run dev --prefix frontend\" \"wait-on http://localhost:5175 && cross-env TIMETABLE_DEV=1 npx electron .\"",
+    "build:desktop": "npm run build:desktop --prefix frontend",
+    "desktop": "npm run build:desktop && npm run rebuild:native && npx electron .",
+    "dist": "npm run build:desktop && npm run rebuild:native && electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@electron/rebuild": "^3.7.1",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "works.holagundi.timetable",
+    "productName": "Timetable Manager",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "frontend/dist/**/*",
+      "!server/data/**"
+    ],
+    "asarUnpack": [
+      "server/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

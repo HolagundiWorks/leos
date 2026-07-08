@@ -4,6 +4,7 @@
 // Only available inside the LEOS desktop app — in a plain browser there is no
 // Tauri bridge, so callers must guard on `isTauri`.
 import { invoke } from '@tauri-apps/api/core';
+import { isTauri as detectTauri } from '../lib/tauriDialog';
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'crashed' | 'repairing';
 
@@ -22,8 +23,7 @@ export interface ServerStatus {
   last_error: string | null;
 }
 
-export const isTauri =
-  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+export const isTauri = detectTauri;
 
 export const serverStatus = () => invoke<ServerStatus>('server_status');
 export const serverStart = () => invoke<ServerStatus>('server_start');

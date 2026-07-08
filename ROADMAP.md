@@ -11,9 +11,9 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 
 - ✅ Rust + SQLite API server (`tiny_http`, `rusqlite`, bcrypt, bearer auth) on `:8787`
 - ✅ React 18 + TypeScript + Vite frontend with Mantine v7
-- ✅ Tauri v2 desktop shell; Rust server embedded; MSI + NSIS installers
+- ✅ Tauri v2 desktop shell; supervised `leos-server` sidecar; MSI + NSIS installers
 - ✅ LEOS brand palette (Deep Graphite `#1E2329`, Muted Teal `#3E7B7B`)
-- ✅ School ops cockpit: utility strip + MS Office two-level tab ribbon + bottom context ribbon + `Ctrl-K` palette
+- ✅ School ops cockpit: utility strip + MS Office two-level tab ribbon + `Ctrl-K` palette
 - ✅ Zustand auth store + TanStack Query v5 for server state
 - ✅ `.leosdb` portable file (ZIP: manifest + school.sqlite + media/ + checksum) — save/open
 - ✅ Academic year engine (`academic_years` table, active year selection)
@@ -26,7 +26,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 - ✅ Courses & Subjects — CRUD
 - ✅ Classes & Sections — CRUD
 - ✅ Teacher-Subject mapper
-- ✅ Selectable rows refine the bottom context ribbon
+- ✅ Row selection in list screens (Zustand)
 
 ## Timetable OS (P2) ✅
 
@@ -178,4 +178,4 @@ unauthenticated by design for the local desktop gate; restrict to localhost
 before any LAN deployment.
 
 Next candidates: change-master-key UI, at-rest encryption (SQLCipher),
-attendance report export, report cards, native Tauri file dialog, LAN mode.
+attendance report export, report cards, LAN mode.

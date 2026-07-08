@@ -2,7 +2,7 @@
   "name": "timetable-app-server",
   "version": "1.0.0",
   "type": "module",
-  "private": true,
+  "license": "GPL-2.0",
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js"

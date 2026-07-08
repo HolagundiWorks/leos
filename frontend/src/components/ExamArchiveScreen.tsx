@@ -10,14 +10,10 @@ import {
   addExamArchive, deleteExamArchive, disposeExamArchive, fetchExamArchiveDoc, fetchExamArchives,
   type ExamArchiveInput,
 } from '../api/client';
+import { MAX_UPLOAD_BYTES, readAsDataUrl } from '../lib/fileData';
 
 const MATERIAL_TYPES = ['Question Paper', 'Answer Scripts', 'Internal Assessment', 'Practical Record', 'Award List', 'Other'];
-const MAX_BYTES = 3 * 1024 * 1024;
 const STATUS: Record<string, { color: string }> = { Retained: { color: 'mint' }, 'Due for disposal': { color: 'orange' }, Disposed: { color: 'gray' } };
-
-const readAsDataUrl = (file: File) => new Promise<string>((res, rej) => {
-  const r = new FileReader(); r.onerror = () => rej(new Error('read failed')); r.onload = () => res(r.result as string); r.readAsDataURL(file);
-});
 
 // CBSE: retain till September of the next academic year. Derive a sensible default.
 function defaultRetention(ay: string): string {
@@ -57,7 +53,7 @@ export function ExamArchiveScreen() {
   const pickFile = (file?: File) => {
     setErr(null);
     if (!file) return;
-    if (file.size > MAX_BYTES) { setErr(`"${file.name}" exceeds 3 MB.`); return; }
+    if (file.size > MAX_UPLOAD_BYTES) { setErr(`"${file.name}" exceeds 3 MB.`); return; }
     readAsDataUrl(file).then((d) => { setDoc(d); setDocName(file.name); });
   };
   const download = async (id: number, name: string) => {

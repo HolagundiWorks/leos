@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { CircleAlert, FilePlus2, FolderOpen, KeyRound, Layers } from 'lucide-react';
 import { useAuth } from '../stores/auth';
+import { isTauri, LEOSDB_FILTER } from '../lib/tauriDialog';
 import { BrandWatermark } from './brand/BrandWatermark';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
@@ -43,11 +44,6 @@ async function postJSON(path: string, body: object) {
  * brand-new empty one. Either way the server's active DB is swapped so login
  * validates against that file.
  */
-// Native file dialogs only exist inside the Tauri desktop app; in a plain
-// browser we fall back to the text input.
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-const LEOSDB_FILTER = [{ name: 'LEOS school file', extensions: ['leosdb'] }];
-
 export function WelcomeScreen() {
   const setSchoolOpened = useAuth((s) => s.setSchoolOpened);
   const [mode, setMode] = useState<'open' | 'create'>('open');

@@ -2652,13 +2652,6 @@ fn xor_encrypt(data: &str, key: &[u8]) -> String {
     hex::encode_hex(&bytes)
 }
 
-#[allow(dead_code)]
-fn xor_decrypt(hex: &str, key: &[u8]) -> String {
-    let bytes = hex::decode_hex(hex);
-    let plain: Vec<u8> = bytes.into_iter().enumerate().map(|(i, b)| b ^ key[i % key.len()]).collect();
-    String::from_utf8_lossy(&plain).into_owned()
-}
-
 fn design_connection_get(state: &AppState) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let result = conn.query_row(
@@ -3264,7 +3257,6 @@ fn audit_log_list(state: &AppState, url: &str) -> (u16, Value) {
     (200, json!({"audit_log": rows, "total": total}))
 }
 
-#[allow(dead_code)]
 fn audit_write(conn: &Connection, user_id: i64, action: &str, resource_type: &str, resource_id: Option<i64>, detail: Option<&str>) {
     let _ = conn.execute(
         "INSERT INTO audit_log(user_id, action, resource_type, resource_id, detail) VALUES(?1,?2,?3,?4,?5)",

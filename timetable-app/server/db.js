@@ -4,7 +4,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(__dirname, 'data');
+const dataDir = process.env.TIMETABLE_DATA_DIR ?? join(__dirname, 'data');
 mkdirSync(dataDir, { recursive: true });
 const dbPath = join(dataDir, 'timetable.db');
 

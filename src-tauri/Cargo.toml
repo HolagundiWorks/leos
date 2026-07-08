@@ -3,6 +3,8 @@ name = "leos"
 version = "0.3.0"
 description = "LEOS — Learning Environment Operating System"
 authors = ["HolagundiWorks"]
+license = "GPL-2.0"
+repository = "https://github.com/HolagundiWorks/leos"
 edition = "2021"
 rust-version = "1.77"
 

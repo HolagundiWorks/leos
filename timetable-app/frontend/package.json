@@ -1,16 +1,16 @@
 {
   "name": "timetable-app-frontend",
-  "private": true,
   "version": "1.0.0",
   "type": "module",
+  "license": "GPL-2.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:desktop": "tsc -b && vite build --mode desktop",
     "preview": "vite preview --port 5175"
   },
   "dependencies": {
     "@mantine/core": "^7.17.0",
-    "@mantine/hooks": "^7.17.0",
     "@tanstack/react-query": "^5.66.0",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",

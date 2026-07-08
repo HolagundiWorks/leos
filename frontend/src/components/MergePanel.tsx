@@ -15,9 +15,9 @@ import {
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle, GitMerge, UserPlus } from 'lucide-react';
+import { isTauri } from '../lib/tauriDialog';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 interface MergeRow {
   action: 'new' | 'duplicate' | 'conflict';

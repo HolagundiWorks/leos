@@ -10,19 +10,12 @@ import {
   deleteComplianceCert, fetchComplianceCertDoc, fetchComplianceCerts, fetchStaff,
   saveComplianceCert, type ComplianceCert, type ComplianceCertInput,
 } from '../api/client';
+import { MAX_UPLOAD_BYTES, readAsDataUrl } from '../lib/fileData';
 
 const SCHOOL_TYPES = ['Fire Safety', 'Building Safety / Stability', 'Sanitation', 'Water Testing', 'CCTV Audit', 'Transport Fitness', 'Pollution NOC', 'Land / Lease', 'Affiliation', 'Society Registration', 'Other'];
 const STAFF_TYPES = ['Appointment Letter', 'Qualification', 'Experience Certificate', 'Training', 'CBSE Workshop', 'Police Verification', 'Medical Fitness', 'Other'];
-const MAX_BYTES = 3 * 1024 * 1024;
 
 const STATUS: Record<string, { color: string }> = { Valid: { color: 'mint' }, Expiring: { color: 'yellow' }, Expired: { color: 'red' }, 'No expiry': { color: 'gray' } };
-
-const readAsDataUrl = (file: File) => new Promise<string>((res, rej) => {
-  const r = new FileReader();
-  r.onerror = () => rej(new Error('read failed'));
-  r.onload = () => res(r.result as string);
-  r.readAsDataURL(file);
-});
 
 const blank = (): ComplianceCertInput => ({ scope: 'school', cert_type: 'Fire Safety', authority: '', reference_no: '', issue_date: '', expiry_date: '', notes: '' });
 
@@ -65,7 +58,7 @@ export function ComplianceCertsScreen() {
   const pickFile = (file?: File) => {
     setErr(null);
     if (!file) return;
-    if (file.size > MAX_BYTES) { setErr(`"${file.name}" exceeds 3 MB.`); return; }
+    if (file.size > MAX_UPLOAD_BYTES) { setErr(`"${file.name}" exceeds 3 MB.`); return; }
     readAsDataUrl(file).then((d) => { setDoc(d); setDocName(file.name); });
   };
   const download = async (id: number, type: string) => {

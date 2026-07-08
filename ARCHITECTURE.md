@@ -57,7 +57,7 @@ A Windows-Service backend can implement the same trait in phase 2 so the server
 can run headless (auto-start on boot, LAN-always-on) — see
 `docs/server-control.md`.
 
-Login: **`admin` / `admin123`** (change before deployment).
+Login: **`admin` / `ChangeMe@3201`** (change before deployment).
 
 ---
 
@@ -68,7 +68,10 @@ Login: **`admin` / `admin123`** (change before deployment).
 - **Tab strip** (32px, Deep Graphite) — 8 tabs: Home · People · Academics · Schedule · Operations · Finance · Events · System
 - **Action ribbon** (62px, glassmorphism) — contextual buttons per tab, filtered by user level
 - **Utility strip** (44px, top) — school name · search · academic year · alerts · user menu
-- **Context ribbon** (bottom) — changes per selected row (e.g. student → View · Edit · Print ID · Message Parent)
+- **Command palette** — `Ctrl-K` for keyboard-first navigation
+
+Row selection (Zustand) highlights the active record in list screens; contextual
+actions live in the tab ribbon above the content area.
 
 Keyboard: `Ctrl-K` command palette, `Alt-1…8` tab shortcuts.
 

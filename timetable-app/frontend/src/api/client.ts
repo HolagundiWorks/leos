@@ -117,8 +117,6 @@ export const api = {
   deleteSubject: (id: number) =>
     req<{ ok: boolean }>(`/subjects/${id}/delete`, { method: 'POST' }),
 
-  fetchCourses: () => req<{ courses: { id: number; name: string }[] }>('/courses'),
-
   fetchStaff: (q = '') => {
     const suffix = q ? `?q=${encodeURIComponent(q)}` : '';
     return req<{ staff: Staff[]; total: number }>(`/staff${suffix}`);
@@ -144,7 +142,7 @@ export const api = {
   fetchTimetable: (sectionId: number) =>
     req<{ entries: TimetableEntry[]; total: number }>(`/timetable?section_id=${sectionId}`),
   fetchTimetableAll: () =>
-    req<{ sections: TimetableSection[]; entries: AllTimetableEntry[] }>('/timetable/all'),
+    req<{ sections: TimetableSection[]; entries: TimetableEntry[] }>('/timetable/all'),
   fetchTimetableQuota: (sectionId: number) =>
     req<{ subjects: QuotaItem[]; total: number }>(`/timetable/quota?section_id=${sectionId}`),
   fetchTeacherLoad: () =>
@@ -168,8 +166,6 @@ export interface TimetableSection {
   class_name: string | null;
   grade_level: string | null;
 }
-
-export interface AllTimetableEntry extends TimetableEntry {}
 
 export interface QuotaItem {
   id: number;

@@ -1,11 +1,25 @@
 import cors from 'cors';
 import express from 'express';
+import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { db, initDb } from './db.js';
 
 initDb();
 
 const app = express();
-const PORT = process.env.PORT || 3879;
+const PORT = Number(process.env.PORT) || 3879;
+const API_PREFIX = process.env.API_PREFIX ?? '';
+
+if (API_PREFIX) {
+  app.use((req, _res, next) => {
+    if (req.url === API_PREFIX) {
+      req.url = '/';
+    } else if (req.url.startsWith(`${API_PREFIX}/`)) {
+      req.url = req.url.slice(API_PREFIX.length);
+    }
+    next();
+  });
+}
 
 app.use(cors());
 app.use(express.json());
@@ -435,6 +449,31 @@ app.post('/timetable/clear', (req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(PORT, () => {
-  console.log(`Timetable API running on http://localhost:${PORT}`);
-});
+function attachStatic() {
+  const staticDir = process.env.STATIC_DIR;
+  if (!staticDir) return;
+  const root = join(staticDir);
+  app.use(express.static(root));
+  app.get('*', (req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+    res.sendFile(join(root, 'index.html'));
+  });
+}
+
+export function startServer(port = PORT) {
+  attachStatic();
+  return new Promise((resolve) => {
+    const server = app.listen(port, () => {
+      console.log(`Timetable API running on http://localhost:${port}`);
+      resolve({ port, server });
+    });
+  });
+}
+
+const isMain =
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) {
+  startServer();
+}

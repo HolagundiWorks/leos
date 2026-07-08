@@ -17,13 +17,10 @@ import type { Staff } from '../api/client';
 import { useStaff } from '../hooks/useStaff';
 import { useTerms } from '../hooks/useTerms';
 import { initials } from '../types';
-import { accentColors, type AccentColor } from '../theme';
+import { avatarColorFor } from '../lib/avatarColor';
+import type { AccentColor } from '../theme';
 import type { Terms } from '../lib/institution';
 import { StaffFormModal } from './StaffFormModal';
-
-function colorFor(id: number): AccentColor {
-  return accentColors[id % accentColors.length];
-}
 
 function roleColor(profile: string | null): AccentColor {
   if (profile === 'admin' || profile === 'principal') return 'brand';
@@ -52,7 +49,7 @@ function StaffRow({
     >
       <Group justify="space-between" wrap="nowrap">
         <Group wrap="nowrap" gap="md" style={{ minWidth: 0 }}>
-          <Avatar radius="xl" color={colorFor(s.id)} variant="light">
+          <Avatar radius="xl" color={avatarColorFor(s.id)} variant="light">
             {initials(name)}
           </Avatar>
           <div style={{ minWidth: 0 }}>

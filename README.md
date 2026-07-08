@@ -1,6 +1,8 @@
 # LEOS — Learning Environment Operating System
 
-**Offline-first, desktop-first school operating system** built by Holagundi Consulting Works.
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](LICENSE)
+
+**Open source** · Offline-first, desktop-first school operating system built by [Holagundi Consulting Works](https://github.com/HolagundiWorks).
 A calm "school ops cockpit" — not another ERP dashboard. All data lives in a single portable file.
 No internet. No server to maintain. No monthly subscription.
 
@@ -30,7 +32,7 @@ LEOS takes that domain knowledge and rebuilds it as a self-contained desktop app
 | **External data** | Manual entry only | CSV + SQLite one-time import connector |
 | **Backup** | Database dump | `.leosdb` ZIP archive (manifest + SQLite + media + checksum) |
 | **Audit** | None | Security audit log with write-event trail |
-| **LAN multi-user** | Web server serves all clients | Standalone mode: other PCs point at this machine's IP:8787 |
+| **LAN multi-user** | Web server serves all clients | ⬜ planned — other PCs will point at this machine's IP:8787 |
 | **Module admin** | Static | Tech Admin panel — enable/disable modules per access level |
 | **Institution type** | School-only terminology | Generic: School / Pre-School / College / PUC — terms adapt |
 
@@ -43,7 +45,7 @@ LEOS takes that domain knowledge and rebuilds it as a self-contained desktop app
 | Desktop shell | **Tauri v2** — single self-contained `.exe`, WebView2 |
 | UI | **React 18 + TypeScript + Vite**, **Mantine v7**, **Lucide** icons |
 | Client state | **Zustand** (auth + selection) + **TanStack Query v5** (server state) |
-| API server | **Rust** (`tiny_http` + `rusqlite` + `bcrypt` + `uuid`) — embedded in Tauri |
+| API server | **Rust** (`tiny_http` + `rusqlite` + `bcrypt` + `uuid`) — supervised `leos-server` sidecar |
 | Database | **SQLite** via `rusqlite` |
 | Portable data file | **`.leosdb`** — ZIP: `manifest.json` + `school.sqlite` + `media/` + `documents/` + checksum |
 | Auth | bcrypt password hash + bearer token |
@@ -59,18 +61,18 @@ LEOS takes that domain knowledge and rebuilds it as a self-contained desktop app
 │   React / Mantine cockpit UI                         │
 │        │  fetch http://localhost:8787                │
 │        ▼                                             │
-│   Embedded Rust API server (thread)                  │
+│   leos-server  (supervised child process / sidecar)  │
 │        │                                             │
 │        ▼                                             │
 │   SQLite  (school.sqlite)                            │
 │        ▲                                             │
 │        └── open / save ──►  school.leosdb            │  ← portable, Tally-style
 └──────────────────────────────────────────────────────┘
-        (LAN mode: other machines point at IP:8787)
+        (LAN mode: planned — other machines point at IP:8787)
 ```
 
 - UI never talks to SQLite directly — it calls the Rust API.
-- The Rust server runs **embedded in the desktop app** (production) or **standalone** (development).
+- The Rust server runs as a **supervised sidecar** in production (see [`docs/server-control.md`](docs/server-control.md)) or **standalone** during development.
 - A school's entire dataset lives in one `.leosdb` file — copy, move, or back it up like any file.
 
 ---
@@ -119,7 +121,9 @@ cd frontend && npm install && npm run dev
 cargo tauri dev
 ```
 
-Open `http://localhost:5174`. **Login: `admin` / `admin123`.**
+Open `http://localhost:5174`. **Login: `admin` / `ChangeMe@3201`.**
+
+For full architecture detail see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ### Production build
 
@@ -136,9 +140,29 @@ No wide sidebar. Three fixed chrome elements:
 
 - **Utility strip** (44px) — school name · search · academic year · alerts · user menu
 - **Two-level tab ribbon** — 8 tabs (Home · People · Academics · Schedule · Operations · Finance · Events · System) with a contextual action ribbon beneath, filtered by the current user's access level
-- **Bottom context ribbon** — actions change per selected row (e.g. selected student → View Profile · Edit · Print ID · Message Parent)
+- **Command palette** — `Ctrl-K` for keyboard-first navigation
 
-Keyboard-first: `Ctrl-K` command palette, `Alt-1…8` tab shortcuts.
+Keyboard shortcuts: `Ctrl-K` command palette, `Alt-1…8` tab shortcuts.
+
+---
+
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Runtime model, navigation, module map |
+| [`ROADMAP.md`](ROADMAP.md) | Feature completion tracker |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production build and release checklist |
+| [`docs/server-control.md`](docs/server-control.md) | Service Manager and sidecar architecture |
+| [`test-plan.md`](test-plan.md) | Automated test strategy |
+| [`tests/README.md`](tests/README.md) | How to run the test suite |
+| [`timetable-app/README.md`](timetable-app/README.md) | Standalone open-source timetable desktop app |
+
+---
+
+## Related projects
+
+**[Timetable Manager](timetable-app/)** — a standalone Electron desktop app that implements LEOS scheduling logic (periods, conflicts, quotas, teacher load) without the full cockpit. Open source under GPL v2.
 
 ---
 
@@ -146,7 +170,7 @@ Keyboard-first: `Ctrl-K` command palette, `Alt-1…8` tab shortcuts.
 
 - Repo is **public**. Never commit `*.sqlite`, `*.leosdb`, or any file containing credentials.
 - Canva API tokens are stored encrypted — never committed in plain text.
-- The `admin`/`admin123` seed credential is for development only. Change it before deployment.
+- The `admin`/`ChangeMe@3201` seed credential is for development only. Change it before deployment.
 
 ---
 
@@ -166,8 +190,10 @@ LEOS is a derivative work of **openSIS Classic Community Edition**, copyright
 - Deployment: web server required → self-contained desktop `.exe`
 - Data portability: database dump → single `.leosdb` portable archive
 
-In accordance with GPL v2, LEOS is also released under the **GNU General Public License v2.0**.
+In accordance with GPL v2, LEOS is released as **open source** under the **GNU General Public License v2.0**.
 See [`LICENSE`](LICENSE) for the full license text.
+
+**Copyright © 2026 Holagundi Consulting Works**
 
 openSIS Classic source and original license:
 https://github.com/os4ed/openSIS-Classic

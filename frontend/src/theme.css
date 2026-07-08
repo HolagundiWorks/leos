@@ -1,34 +1,11 @@
-/* Scoped wrapper styles for every HCW-SMS React root, so the new UI looks
-   consistent whether it renders standalone (playground) or embedded inside a
-   legacy HCW-SMS PHP page. */
-.hcw-ui {
-  background: transparent;
-  color: var(--mantine-color-text);
-  font-family: var(--mantine-font-family);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  min-height: 100%;
-}
-
-/* When the island takes over a full page, fill the viewport. */
-.hcw-ui--fullscreen {
-  min-height: 100vh;
-}
-
-/* Work-queue rows on the dashboard. */
-.hcw-workrow {
-  transition: background 120ms ease;
-}
-.hcw-workrow:hover {
-  background: rgba(255, 255, 255, 0.55);
-}
+/* LEOS global theme — liquid-glass surfaces over the animated background. */
 
 /* =========================================================================
    Liquid-glass theme — animated SVG background + frosted surfaces
    ========================================================================= */
 html,
 body,
-#hcw-playground {
+#leos-app {
   background: transparent;
 }
 body {

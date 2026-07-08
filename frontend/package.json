@@ -1,9 +1,14 @@
 {
-  "name": "hcw-sms-ui",
-  "private": true,
+  "name": "leos-ui",
   "version": "0.1.0",
   "type": "module",
-  "description": "HCW-SMS desktop UI — React + Mantine (Tauri shell, Rust/SQLite API)",
+  "license": "GPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HolagundiWorks/leos.git",
+    "directory": "frontend"
+  },
+  "description": "LEOS desktop UI — React + Mantine (Tauri shell, Rust/SQLite API)",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
