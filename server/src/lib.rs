@@ -805,6 +805,61 @@ fn dispatch(
         let hash = &path["/blobs/".len()..];
         return with_auth(state, token, |_| blob_get(state, hash));
     }
+    if method == &Method::Post && path == "/sync/submit" {
+        return with_auth(state, token, |u| sync_submit(state, u, body));
+    }
+    // --- teaching loop (M3): notes, assignments, submissions ---
+    if method == &Method::Get && path == "/notes" {
+        return with_auth(state, token, |_| notes_list(state, url));
+    }
+    if method == &Method::Post && path == "/notes" {
+        return with_auth(state, token, |u| note_create(state, u, body));
+    }
+    if method == &Method::Post && path.starts_with("/notes/") && path.ends_with("/update") {
+        let id_str = &path["/notes/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| note_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/notes/") && path.ends_with("/delete") {
+        let id_str = &path["/notes/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| note_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/assignments" {
+        return with_auth(state, token, |_| assignments_list(state, url));
+    }
+    if method == &Method::Post && path == "/assignments" {
+        return with_auth(state, token, |u| assignment_create(state, u, body));
+    }
+    if method == &Method::Post && path.starts_with("/assignments/") && path.ends_with("/update") {
+        let id_str = &path["/assignments/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| assignment_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/assignments/") && path.ends_with("/delete") {
+        let id_str = &path["/assignments/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| assignment_delete(state, id));
+        }
+    }
+    if method == &Method::Get && path == "/submissions" {
+        return with_auth(state, token, |_| submissions_list(state, url));
+    }
+    if method == &Method::Post && path == "/submissions" {
+        return with_auth(state, token, |u| {
+            let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+            submission_create(state, u, &v)
+        });
+    }
+    if method == &Method::Post && path.starts_with("/submissions/") && path.ends_with("/grade") {
+        let id_str = &path["/submissions/".len()..path.len() - "/grade".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |u| submission_grade(state, id, u, body));
+        }
+    }
     if method == &Method::Get && path == "/announcements" {
         return with_auth(state, token, |_| announcements_list(state, url));
     }
@@ -2262,6 +2317,45 @@ fn migrate_schema(conn: &Connection) {
     // Revision bookkeeping on the first synced channel (announcements).
     let _ = conn.execute("ALTER TABLE announcements ADD COLUMN revision INTEGER DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE announcements ADD COLUMN updated_at TEXT", []);
+
+    // --- teaching loop (M3): notes, assignments, submissions ---
+    // Down-channels (lecturer → student): notes, assignments, and the grade on a
+    // submission. Up-channel (student → lecturer): submissions, submitted via
+    // /sync/submit with a client_key for idempotency. Attachments reference the
+    // content-addressed blob store from M2.
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER, \
+         studio_id INTEGER, author_id INTEGER, title TEXT NOT NULL, body TEXT, \
+         revision INTEGER DEFAULT 0, updated_at TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS note_blobs(id INTEGER PRIMARY KEY AUTOINCREMENT, note_id INTEGER NOT NULL, \
+         blob_hash TEXT, filename TEXT, kind TEXT)",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS assignments(id INTEGER PRIMARY KEY AUTOINCREMENT, studio_id INTEGER, \
+         subject_id INTEGER, title TEXT NOT NULL, brief TEXT, rubric TEXT, due_date TEXT, author_id INTEGER, \
+         revision INTEGER DEFAULT 0, updated_at TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS submissions(id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, \
+         student_id INTEGER NOT NULL, version INTEGER DEFAULT 1, note TEXT, client_key TEXT, \
+         submitted_at TEXT DEFAULT (datetime('now')), grade TEXT, feedback TEXT, graded_by INTEGER, graded_at TEXT, \
+         revision INTEGER DEFAULT 0, updated_at TEXT)",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_submissions_client_key ON submissions(client_key) WHERE client_key IS NOT NULL",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS submission_blobs(id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, \
+         blob_hash TEXT, filename TEXT, kind TEXT)",
+        [],
+    );
 }
 
 fn init_db(conn: &Connection) {
@@ -3791,6 +3885,36 @@ fn sync_changes(state: &AppState, url: &str) -> (u16, Value) {
                 }
                 Ok(())
             }
+            "notes" => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, subject_id, studio_id, title, body, revision, updated_at \
+                     FROM notes WHERE revision > ?1 ORDER BY revision",
+                )?;
+                let mut rows = stmt.query(params![since])?;
+                while let Some(r) = rows.next()? { changes.push(note_row(r)?); }
+                Ok(())
+            }
+            "assignments" => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, studio_id, subject_id, title, brief, rubric, due_date, revision, updated_at \
+                     FROM assignments WHERE revision > ?1 ORDER BY revision",
+                )?;
+                let mut rows = stmt.query(params![since])?;
+                while let Some(r) = rows.next()? { changes.push(assignment_row(r)?); }
+                Ok(())
+            }
+            "submissions" => {
+                let mut stmt = conn.prepare(
+                    "SELECT s.id, s.assignment_id, s.student_id, s.version, s.note, s.submitted_at, \
+                     s.grade, s.feedback, s.graded_at, s.revision, \
+                     (COALESCE(st.first_name,'') || ' ' || COALESCE(st.last_name,'')) \
+                     FROM submissions s LEFT JOIN students st ON st.id = s.student_id \
+                     WHERE s.revision > ?1 ORDER BY s.revision",
+                )?;
+                let mut rows = stmt.query(params![since])?;
+                while let Some(r) = rows.next()? { changes.push(submission_row(r)?); }
+                Ok(())
+            }
             _ => Ok(()),
         }
     })();
@@ -3875,6 +3999,282 @@ fn blob_get(state: &AppState, hash: &str) -> (u16, Value) {
         Ok((size, data)) => (200, json!({"hash": hash, "size": size, "data": data})),
         Err(_) => (404, json!({"error": "blob not found"})),
     }
+}
+
+/// POST /sync/submit — the up-channel (student → hub). Idempotent by client_key
+/// so an offline→online retry never double-inserts. Currently handles the
+/// `submissions` channel; other up-channels register here as they land.
+fn sync_submit(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    match v["channel"].as_str().unwrap_or("") {
+        "submissions" => submission_create(state, uid, &v),
+        other => (422, json!({"error": format!("unknown sync channel: {other}")})),
+    }
+}
+
+/// Insert a submission (+ attachment rows). Shared by /sync/submit and
+/// POST /submissions. Dedups on client_key: a repeat returns the existing row.
+fn submission_create(state: &AppState, uid: i64, v: &Value) -> (u16, Value) {
+    let assignment_id = match v["assignment_id"].as_i64() {
+        Some(a) => a,
+        None => return (422, json!({"error": "assignment_id required"})),
+    };
+    // Default the student to the caller; an admin may submit on behalf of one.
+    let student_id = v["student_id"].as_i64().unwrap_or(uid);
+    let client_key = v["client_key"].as_str().filter(|s| !s.is_empty());
+    let note = v["note"].as_str().filter(|s| !s.is_empty());
+    let conn = state.conn.lock().unwrap();
+
+    // Idempotency: if this client_key already landed, return that submission.
+    if let Some(k) = client_key {
+        if let Ok(existing) = conn.query_row(
+            "SELECT id FROM submissions WHERE client_key=?1",
+            params![k],
+            |r| r.get::<_, i64>(0),
+        ) {
+            return (200, json!({"ok": true, "id": existing, "deduped": true}));
+        }
+    }
+
+    // Next version for this (assignment, student).
+    let version: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(version),0)+1 FROM submissions WHERE assignment_id=?1 AND student_id=?2",
+            params![assignment_id, student_id],
+            |r| r.get(0),
+        )
+        .unwrap_or(1);
+
+    if let Err(e) = conn.execute(
+        "INSERT INTO submissions(assignment_id, student_id, version, note, client_key) VALUES(?1,?2,?3,?4,?5)",
+        params![assignment_id, student_id, version, note, client_key],
+    ) {
+        return (500, json!({"error": format!("{e}")}));
+    }
+    let id = conn.last_insert_rowid();
+    // Attachment rows reference already-uploaded blobs (by hash).
+    if let Some(blobs) = v["blobs"].as_array() {
+        for b in blobs {
+            let _ = conn.execute(
+                "INSERT INTO submission_blobs(submission_id, blob_hash, filename, kind) VALUES(?1,?2,?3,?4)",
+                params![
+                    id,
+                    b["hash"].as_str(),
+                    b["filename"].as_str(),
+                    b["kind"].as_str().unwrap_or("sheet"),
+                ],
+            );
+        }
+    }
+    sync_bump(&conn, "submissions", id);
+    (200, json!({"ok": true, "id": id, "version": version}))
+}
+
+fn submission_row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+    Ok(json!({
+        "id": r.get::<_, i64>(0)?,
+        "assignment_id": r.get::<_, i64>(1)?,
+        "student_id": r.get::<_, i64>(2)?,
+        "version": r.get::<_, i64>(3)?,
+        "note": r.get::<_, Option<String>>(4)?,
+        "submitted_at": r.get::<_, Option<String>>(5)?,
+        "grade": r.get::<_, Option<String>>(6)?,
+        "feedback": r.get::<_, Option<String>>(7)?,
+        "graded_at": r.get::<_, Option<String>>(8)?,
+        "revision": r.get::<_, i64>(9)?,
+        "student_name": r.get::<_, Option<String>>(10)?,
+    }))
+}
+
+/// GET /submissions?assignment_id=… — the lecturer's inbox for an assignment.
+fn submissions_list(state: &AppState, url: &str) -> (u16, Value) {
+    let aid = q_param(url, "assignment_id").and_then(|s| s.parse::<i64>().ok());
+    let conn = state.conn.lock().unwrap();
+    let mut list = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let base = "SELECT s.id, s.assignment_id, s.student_id, s.version, s.note, s.submitted_at, \
+             s.grade, s.feedback, s.graded_at, s.revision, \
+             (COALESCE(st.first_name,'') || ' ' || COALESCE(st.last_name,'')) \
+             FROM submissions s LEFT JOIN students st ON st.id = s.student_id";
+        if let Some(a) = aid {
+            let mut stmt = conn.prepare(&format!("{base} WHERE s.assignment_id=?1 ORDER BY s.submitted_at DESC"))?;
+            let mut rows = stmt.query(params![a])?;
+            while let Some(r) = rows.next()? { list.push(submission_row(r)?); }
+        } else {
+            let mut stmt = conn.prepare(&format!("{base} ORDER BY s.submitted_at DESC LIMIT 200"))?;
+            let mut rows = stmt.query([])?;
+            while let Some(r) = rows.next()? { list.push(submission_row(r)?); }
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"submissions": list, "total": list.len()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+/// POST /submissions/:id/grade  { grade, feedback } — lecturer grades; the grade
+/// syncs back down to the student on the `submissions` channel.
+fn submission_grade(state: &AppState, id: i64, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE submissions SET grade=?1, feedback=?2, graded_by=?3, graded_at=datetime('now') WHERE id=?4",
+        params![v["grade"].as_str(), v["feedback"].as_str(), uid, id],
+    ) {
+        Ok(0) => (404, json!({"error": "submission not found"})),
+        Ok(_) => { sync_bump(&conn, "submissions", id); (200, json!({"ok": true})) }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+// ---- teaching loop: notes ----
+
+fn note_row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+    Ok(json!({
+        "id": r.get::<_, i64>(0)?,
+        "subject_id": r.get::<_, Option<i64>>(1)?,
+        "studio_id": r.get::<_, Option<i64>>(2)?,
+        "title": r.get::<_, Option<String>>(3)?,
+        "body": r.get::<_, Option<String>>(4)?,
+        "revision": r.get::<_, i64>(5)?,
+        "updated_at": r.get::<_, Option<String>>(6)?,
+    }))
+}
+
+fn notes_list(state: &AppState, url: &str) -> (u16, Value) {
+    let studio = q_param(url, "studio_id").and_then(|s| s.parse::<i64>().ok());
+    let conn = state.conn.lock().unwrap();
+    let mut list = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let base = "SELECT id, subject_id, studio_id, title, body, revision, updated_at FROM notes";
+        if let Some(s) = studio {
+            let mut stmt = conn.prepare(&format!("{base} WHERE studio_id=?1 ORDER BY id DESC"))?;
+            let mut rows = stmt.query(params![s])?;
+            while let Some(r) = rows.next()? { list.push(note_row(r)?); }
+        } else {
+            let mut stmt = conn.prepare(&format!("{base} ORDER BY id DESC LIMIT 500"))?;
+            let mut rows = stmt.query([])?;
+            while let Some(r) = rows.next()? { list.push(note_row(r)?); }
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"notes": list, "total": list.len()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn note_create(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let title = match v["title"].as_str().filter(|s| !s.is_empty()) {
+        Some(t) => t.to_string(),
+        None => return (422, json!({"error": "title required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO notes(subject_id, studio_id, author_id, title, body) VALUES(?1,?2,?3,?4,?5)",
+        params![v["subject_id"].as_i64(), v["studio_id"].as_i64(), uid, title, v["body"].as_str()],
+    ) {
+        Ok(_) => { let id = conn.last_insert_rowid(); sync_bump(&conn, "notes", id); (200, json!({"ok": true, "id": id})) }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn note_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE notes SET title=COALESCE(?1,title), body=COALESCE(?2,body), subject_id=?3, studio_id=?4 WHERE id=?5",
+        params![v["title"].as_str().filter(|s| !s.is_empty()), v["body"].as_str(), v["subject_id"].as_i64(), v["studio_id"].as_i64(), id],
+    ) {
+        Ok(0) => (404, json!({"error": "note not found"})),
+        Ok(_) => { sync_bump(&conn, "notes", id); (200, json!({"ok": true})) }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn note_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM notes WHERE id=?1", params![id]);
+    let _ = conn.execute("DELETE FROM note_blobs WHERE note_id=?1", params![id]);
+    sync_tombstone(&conn, "notes", id);
+    (200, json!({"ok": true}))
+}
+
+// ---- teaching loop: assignments ----
+
+fn assignment_row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+    Ok(json!({
+        "id": r.get::<_, i64>(0)?,
+        "studio_id": r.get::<_, Option<i64>>(1)?,
+        "subject_id": r.get::<_, Option<i64>>(2)?,
+        "title": r.get::<_, Option<String>>(3)?,
+        "brief": r.get::<_, Option<String>>(4)?,
+        "rubric": r.get::<_, Option<String>>(5)?,
+        "due_date": r.get::<_, Option<String>>(6)?,
+        "revision": r.get::<_, i64>(7)?,
+        "updated_at": r.get::<_, Option<String>>(8)?,
+    }))
+}
+
+fn assignments_list(state: &AppState, url: &str) -> (u16, Value) {
+    let studio = q_param(url, "studio_id").and_then(|s| s.parse::<i64>().ok());
+    let conn = state.conn.lock().unwrap();
+    let mut list = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let base = "SELECT id, studio_id, subject_id, title, brief, rubric, due_date, revision, updated_at FROM assignments";
+        if let Some(s) = studio {
+            let mut stmt = conn.prepare(&format!("{base} WHERE studio_id=?1 ORDER BY id DESC"))?;
+            let mut rows = stmt.query(params![s])?;
+            while let Some(r) = rows.next()? { list.push(assignment_row(r)?); }
+        } else {
+            let mut stmt = conn.prepare(&format!("{base} ORDER BY id DESC LIMIT 500"))?;
+            let mut rows = stmt.query([])?;
+            while let Some(r) = rows.next()? { list.push(assignment_row(r)?); }
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"assignments": list, "total": list.len()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn assignment_create(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let title = match v["title"].as_str().filter(|s| !s.is_empty()) {
+        Some(t) => t.to_string(),
+        None => return (422, json!({"error": "title required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO assignments(studio_id, subject_id, title, brief, rubric, due_date, author_id) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        params![v["studio_id"].as_i64(), v["subject_id"].as_i64(), title, v["brief"].as_str(), v["rubric"].as_str(), v["due_date"].as_str(), uid],
+    ) {
+        Ok(_) => { let id = conn.last_insert_rowid(); sync_bump(&conn, "assignments", id); (200, json!({"ok": true, "id": id})) }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn assignment_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE assignments SET title=COALESCE(?1,title), brief=?2, rubric=?3, due_date=?4, studio_id=?5, subject_id=?6 WHERE id=?7",
+        params![v["title"].as_str().filter(|s| !s.is_empty()), v["brief"].as_str(), v["rubric"].as_str(), v["due_date"].as_str(), v["studio_id"].as_i64(), v["subject_id"].as_i64(), id],
+    ) {
+        Ok(0) => (404, json!({"error": "assignment not found"})),
+        Ok(_) => { sync_bump(&conn, "assignments", id); (200, json!({"ok": true})) }
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn assignment_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute("DELETE FROM assignments WHERE id=?1", params![id]);
+    sync_tombstone(&conn, "assignments", id);
+    (200, json!({"ok": true}))
 }
 
 fn announcements_list(state: &AppState, url: &str) -> (u16, Value) {

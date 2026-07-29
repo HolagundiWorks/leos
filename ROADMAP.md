@@ -87,7 +87,8 @@ no-subscription ethos). Pure backend/plumbing; the current UI keeps working.
 - ⬜ JWT auth (role claim → L1–L5) — still on the in-memory bearer-session map;
   hardening pending
 - ⬜ WebSocket `/events` push signal (today: pull/poll; logic is push-ready)
-- ⬜ `POST /sync/submit` up-channel — lands with M3 (needs submission tables)
+- ✅ `POST /sync/submit` up-channel — idempotent by `client_key` (verified:
+  offline→online resubmit dedups, no dupes); landed with the M3 submission tables
 - ⬜ `/packages/sync-client` extraction (currently in `frontend/src/lib`) — the
   monorepo refactor is the cross-cutting track below
 - **Acceptance:** ✅ verified end-to-end — create/publish/delete an announcement
@@ -95,18 +96,22 @@ no-subscription ethos). Pure backend/plumbing; the current UI keeps working.
   arrive as tombstones); blob put/get round-trips and dedups by hash. Push-signal
   and the submit up-channel remain (above).
 
-## M3 — Lecturer web app + Jury OS ⬜
+## M3 — Lecturer web app + Jury OS 🟡
 
+- ✅ Teaching-loop backend: `notes`, `assignments`, `submissions` (+ attachment
+  refs) tables and CRUD; notes/assignments/submissions sync channels; submission
+  grading (`grade` + written `feedback`) that syncs back down to the student
+- ✅ Announcements sync channel (from M2) — publish → students pull
 - ⬜ Web (Vite) build of the shared UI; hub-backed auth
-- ⬜ Notes authoring (markdown + attachments), scoped to studio/subject → publish
-- ⬜ Assignment briefs (due date, deliverables, rubric) → publish
-- ⬜ Submission inbox + grading against rubric → `jury_marks` + written feedback
+- ⬜ Notes authoring (markdown + attachments) UI, scoped to studio/subject
+- ⬜ Assignment briefs UI (due date, deliverables, rubric)
+- ⬜ Submission inbox + grading UI against the rubric
 - ⬜ Jury OS: `juries`, `jury_panel` (internal + external examiners),
   `jury_marks`; pin-up scheduling reusing timetable conflict detection
 - ⬜ Attendance-eligibility gate (COA min-attendance) on final juries
-- ⬜ Announcements + timetable publish (reuse Event/Timetable OS + revision cols)
-- **Acceptance:** a lecturer publishes a note + assignment and grades a
-  submission entirely in the browser; students receive all three via sync.
+- **Acceptance:** ✅ backend verified end-to-end — publish a note + assignment,
+  student submits via the up-channel (idempotent), lecturer grades, grade + notes
+  + assignment all arrive on the student's sync channels. UI + Jury OS remain.
 
 ## M4 — Student desktop core + Portfolio ⬜
 

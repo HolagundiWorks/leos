@@ -1115,6 +1115,91 @@ export function getBlob(token: string, hash: string) {
   return req<{ hash: string; size: number; data: string }>(`/blobs/${hash}`, { token });
 }
 
+// --- teaching loop (M3): notes, assignments, submissions ---
+export interface Note {
+  id: number;
+  subject_id: number | null;
+  studio_id: number | null;
+  title: string | null;
+  body: string | null;
+  revision: number;
+  updated_at: string | null;
+}
+export interface NoteFormData { title: string; body?: string; subject_id?: number | null; studio_id?: number | null; }
+export function fetchNotes(token: string, studioId?: number) {
+  const suffix = studioId != null ? `?studio_id=${studioId}` : '';
+  return req<{ notes: Note[]; total: number }>(`/notes${suffix}`, { token });
+}
+export function createNote(token: string, data: NoteFormData) {
+  return req<{ ok: boolean; id: number }>('/notes', { method: 'POST', token, body: data });
+}
+export function updateNote(token: string, id: number, data: Partial<NoteFormData>) {
+  return req<{ ok: boolean }>(`/notes/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteNote(token: string, id: number) {
+  return req<{ ok: boolean }>(`/notes/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
+export interface Assignment {
+  id: number;
+  studio_id: number | null;
+  subject_id: number | null;
+  title: string | null;
+  brief: string | null;
+  rubric: string | null;
+  due_date: string | null;
+  revision: number;
+  updated_at: string | null;
+}
+export interface AssignmentFormData {
+  title: string; brief?: string; rubric?: string; due_date?: string;
+  studio_id?: number | null; subject_id?: number | null;
+}
+export function fetchAssignments(token: string, studioId?: number) {
+  const suffix = studioId != null ? `?studio_id=${studioId}` : '';
+  return req<{ assignments: Assignment[]; total: number }>(`/assignments${suffix}`, { token });
+}
+export function createAssignment(token: string, data: AssignmentFormData) {
+  return req<{ ok: boolean; id: number }>('/assignments', { method: 'POST', token, body: data });
+}
+export function updateAssignment(token: string, id: number, data: Partial<AssignmentFormData>) {
+  return req<{ ok: boolean }>(`/assignments/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteAssignment(token: string, id: number) {
+  return req<{ ok: boolean }>(`/assignments/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
+export interface Submission {
+  id: number;
+  assignment_id: number;
+  student_id: number;
+  version: number;
+  note: string | null;
+  submitted_at: string | null;
+  grade: string | null;
+  feedback: string | null;
+  graded_at: string | null;
+  revision: number;
+  student_name: string | null;
+}
+export interface SubmissionBlobRef { hash: string; filename?: string; kind?: string }
+export function fetchSubmissions(token: string, assignmentId?: number) {
+  const suffix = assignmentId != null ? `?assignment_id=${assignmentId}` : '';
+  return req<{ submissions: Submission[]; total: number }>(`/submissions${suffix}`, { token });
+}
+/** Student submit via the sync up-channel (idempotent by client_key). */
+export function submitAssignment(
+  token: string,
+  data: { assignment_id: number; student_id?: number; note?: string; client_key: string; blobs?: SubmissionBlobRef[] },
+) {
+  return req<{ ok: boolean; id: number; version?: number; deduped?: boolean }>(
+    '/sync/submit', { method: 'POST', token, body: { channel: 'submissions', ...data } },
+  );
+}
+export function gradeSubmission(token: string, id: number, data: { grade?: string; feedback?: string }) {
+  return req<{ ok: boolean }>(`/submissions/${id}/grade`, { method: 'POST', token, body: data });
+}
+
 export interface Period {
   id?: number;
   label: string;
