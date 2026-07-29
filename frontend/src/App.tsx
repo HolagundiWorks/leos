@@ -11,6 +11,7 @@ import { StudentProfileScreen } from './components/StudentProfileScreen';
 import { StaffScreen } from './components/StaffScreen';
 import { CoursesScreen } from './components/CoursesScreen';
 import { SubjectsScreen } from './components/SubjectsScreen';
+import { StudiosScreen } from './components/StudiosScreen';
 import { ClassroomsScreen } from './components/ClassroomsScreen';
 import { ClassesScreen } from './components/ClassesScreen';
 import { TeacherSubjectsScreen } from './components/TeacherSubjectsScreen';
@@ -128,6 +129,8 @@ export function App() {
     screen = <CoursesScreen />;
   } else if (active === 'subjects') {
     screen = <SubjectsScreen />;
+  } else if (active === 'studios') {
+    screen = <StudiosScreen />;
   } else if (active === 'classrooms') {
     screen = <ClassroomsScreen />;
   } else if (active === 'classes') {

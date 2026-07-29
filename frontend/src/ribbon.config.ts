@@ -139,6 +139,7 @@ export const ribbonTabs: RibbonTab[] = [
         actions: [
           { key: 'courses', label: 'Courses', icon: Layers, accessLevel: 2 },
           { key: 'subjects', label: 'Subjects', icon: Book, accessLevel: 2 },
+          { key: 'studios', label: 'Studios', icon: Building2, accessLevel: 2 },
           { key: 'academic-year', label: 'Academic Year', icon: CalendarRange, accessLevel: 2 },
         ],
       },

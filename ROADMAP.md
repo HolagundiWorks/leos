@@ -28,7 +28,7 @@ map back to the design docs (AE = system-design Phases; S = split Phases).
 | # | Milestone | Streams | Depends on | Status |
 |---|---|---|---|---|
 | **M0** | Vocabulary + design docs | Domain, Topology | — | ✅ |
-| **M1** | Studio domain foundation | Domain (AE1) | M0 | ⬜ |
+| **M1** | Studio domain foundation | Domain (AE1) | M0 | 🟡 |
 | **M2** | Hub networking + sync engine | Topology (S-A, S-B) | M1 | ⬜ |
 | **M3** | Lecturer web app + Jury OS | Both (S-C, AE2) | M2 | ⬜ |
 | **M4** | Student desktop core + Portfolio | Both (S-D, AE3) | M2 | ⬜ |
@@ -46,21 +46,26 @@ map back to the design docs (AE = system-design Phases; S = split Phases).
 - ✅ Research + revision proposal, system-design doc, two-app split doc
 - ✅ README / ROADMAP positioning
 
-## M1 — Studio domain foundation ⬜
+## M1 — Studio domain foundation 🟡
 
 Single-app still; additive and non-breaking.
 
-- ⬜ `subjects` gains `head` (core / building-science / hss / elective),
-  `credits`, `is_studio` (idempotent `ALTER TABLE`)
-- ⬜ `staff` gains `is_visiting`, `coa_reg_no`, `qualification`
-- ⬜ `students` gains `programme`, `batch_year`, `nata_score`, `jee2_score`
-- ⬜ `schools` gains `coa_reg_no`, `sanctioned_intake`
-- ⬜ `studios` table + `/studios` CRUD + `StudiosScreen.tsx` on Academics tab
-- ⬜ `periods.period_type = 'studio'` for long (3–4 hr) timetable blocks
-- ⬜ Compliance stub in Institution Settings (COA reg. no., intake)
-- **Acceptance:** create an architecture file, define programme/year/studio,
-  tag studio subjects with credits; an existing `school` file opens unchanged
-  (migration-safety test).
+- ✅ `subjects` gains `head` (core / building-science / hss / elective),
+  `credits`, `is_studio` (idempotent `ALTER TABLE`; wired through subject CRUD)
+- ✅ `staff` gains `is_visiting`, `coa_reg_no`, `qualification` (schema)
+- ✅ `students` gains `programme`, `batch_year`, `nata_score`, `jee2_score` (schema)
+- ✅ `schools` gains `coa_reg_no`, `sanctioned_intake` (schema + settings UI)
+- ✅ `studios` table + `/studios` CRUD + `StudiosScreen.tsx` on Academics tab
+- ✅ Compliance stub in Institution Settings (COA reg. no., intake) — shown for
+  the `architecture` type
+- ⬜ Student admission form fields (NATA/JEE-2, programme, batch) in the UI
+- ⬜ `periods.period_type = 'studio'` long (3–4 hr) blocks in the timetable UI
+  (column already accepts it)
+- **Acceptance:** ✅ create studios, tag studio subjects with credits/head, set
+  COA reg. no. + intake — verified end-to-end against the server; an existing
+  `school` file takes the additive `ALTER`s and still opens/serves unchanged.
+  Remaining UI bits (student admission fields, studio timetable blocks) tracked
+  above.
 
 ## M2 — Hub networking + sync engine ⬜
 

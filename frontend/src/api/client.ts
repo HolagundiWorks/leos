@@ -291,6 +291,9 @@ export interface Subject {
   type: string | null;
   weekly_periods: number;
   is_lab: number;
+  head?: string | null; // core | building_science | hss | elective
+  credits?: number;
+  is_studio?: number;
 }
 export interface SubjectsResponse {
   subjects: Subject[];
@@ -311,6 +314,9 @@ export interface SubjectFormData {
   weekly_periods?: number;
   is_lab?: boolean;
   mandatory?: boolean;
+  head?: string;
+  credits?: number;
+  is_studio?: boolean;
 }
 export function createSubject(token: string, data: SubjectFormData) {
   return req<{ ok: boolean; id: number }>('/subjects', { method: 'POST', token, body: data });
@@ -320,6 +326,47 @@ export function updateSubject(token: string, id: number, data: Partial<SubjectFo
 }
 export function deleteSubject(token: string, id: number) {
   return req<{ ok: boolean }>(`/subjects/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
+// --- architecture: design studios (M1) ---
+export interface Studio {
+  id: number;
+  name: string | null;
+  year: number | null;
+  semester: number | null;
+  subject_id: number | null;
+  section_id: number | null;
+  academic_year_id: number | null;
+  credits: number;
+  coordinator_staff_id: number | null;
+  subject_name: string | null;
+  coordinator_name: string | null;
+}
+export interface StudiosResponse {
+  studios: Studio[];
+  total: number;
+}
+export interface StudioFormData {
+  name: string;
+  year?: number | null;
+  semester?: number | null;
+  subject_id?: number | null;
+  section_id?: number | null;
+  academic_year_id?: number | null;
+  credits?: number;
+  coordinator_staff_id?: number | null;
+}
+export function fetchStudios(token: string) {
+  return req<StudiosResponse>('/studios', { token });
+}
+export function createStudio(token: string, data: StudioFormData) {
+  return req<{ ok: boolean; id: number }>('/studios', { method: 'POST', token, body: data });
+}
+export function updateStudio(token: string, id: number, data: Partial<StudioFormData>) {
+  return req<{ ok: boolean }>(`/studios/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteStudio(token: string, id: number) {
+  return req<{ ok: boolean }>(`/studios/${id}/delete`, { method: 'POST', token, body: {} });
 }
 
 export interface Classroom {
@@ -349,6 +396,8 @@ export interface School {
   affiliation_no?: string | null;
   school_code?: string | null;
   udise_code?: string | null;
+  coa_reg_no?: string | null; // architecture: Council of Architecture registration
+  sanctioned_intake?: number | null;
 }
 export async function fetchSchool(token: string): Promise<School | null> {
   const res = await req<{ school: School | null }>('/school', { token });
@@ -361,6 +410,7 @@ export function saveSchool(
     address?: string; principal_name?: string;
     logo?: string | null; signature?: string | null; cert_bg?: string | null;
     affiliation_no?: string | null; school_code?: string | null; udise_code?: string | null;
+    coa_reg_no?: string | null; sanctioned_intake?: number | null;
   },
 ) {
   return req<{ ok: boolean }>('/school', { method: 'POST', token, body: data });

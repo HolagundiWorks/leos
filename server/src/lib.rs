@@ -279,6 +279,25 @@ fn dispatch(
             return with_auth(state, token, |_| subject_delete(state, id));
         }
     }
+    // --- architecture: studios (M1) ---
+    if method == &Method::Get && path == "/studios" {
+        return with_auth(state, token, |_| studios_list(state));
+    }
+    if method == &Method::Post && path == "/studios" {
+        return with_auth(state, token, |_| studio_create(state, body));
+    }
+    if method == &Method::Post && path.starts_with("/studios/") && path.ends_with("/update") {
+        let id_str = &path["/studios/".len()..path.len() - "/update".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| studio_update(state, id, body));
+        }
+    }
+    if method == &Method::Post && path.starts_with("/studios/") && path.ends_with("/delete") {
+        let id_str = &path["/studios/".len()..path.len() - "/delete".len()];
+        if let Ok(id) = id_str.parse::<i64>() {
+            return with_auth(state, token, |_| studio_delete(state, id));
+        }
+    }
     if method == &Method::Get && path == "/classrooms" {
         return with_auth(state, token, |_| classrooms_list(state));
     }
@@ -2179,6 +2198,29 @@ fn migrate_schema(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE students ADD COLUMN lock_state TEXT DEFAULT 'Draft'", []);
     let _ = conn.execute("ALTER TABLE users ADD COLUMN role_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 3", []);
+
+    // --- architecture-education (M1: studio domain foundation) ---
+    // Additive, institution-gated; a plain `school` file simply never populates
+    // these. See docs/architecture-education-system-design.md.
+    let _ = conn.execute("ALTER TABLE subjects ADD COLUMN head TEXT", []); // core|building_science|hss|elective
+    let _ = conn.execute("ALTER TABLE subjects ADD COLUMN credits INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE subjects ADD COLUMN is_studio INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE staff ADD COLUMN is_visiting INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE staff ADD COLUMN coa_reg_no TEXT", []);
+    let _ = conn.execute("ALTER TABLE staff ADD COLUMN qualification TEXT", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN programme TEXT", []); // barch|march|phd
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN batch_year INTEGER", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN nata_score REAL", []);
+    let _ = conn.execute("ALTER TABLE students ADD COLUMN jee2_score REAL", []);
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN coa_reg_no TEXT", []);
+    let _ = conn.execute("ALTER TABLE schools ADD COLUMN sanctioned_intake INTEGER", []);
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS studios(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, \
+         year INTEGER, semester INTEGER, subject_id INTEGER, section_id INTEGER, \
+         academic_year_id INTEGER, credits INTEGER DEFAULT 0, coordinator_staff_id INTEGER, \
+         created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
 }
 
 fn init_db(conn: &Connection) {
@@ -5916,7 +5958,7 @@ fn subject_create(state: &AppState, body: &str) -> (u16, Value) {
     };
     let conn = state.conn.lock().unwrap();
     match conn.execute(
-        "INSERT INTO subjects(course_id, name, code, type, weekly_periods, is_lab, mandatory) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        "INSERT INTO subjects(course_id, name, code, type, weekly_periods, is_lab, mandatory, head, credits, is_studio) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         params![
             v["course_id"].as_i64(),
             name,
@@ -5925,6 +5967,9 @@ fn subject_create(state: &AppState, body: &str) -> (u16, Value) {
             v["weekly_periods"].as_i64().unwrap_or(0),
             v["is_lab"].as_bool().unwrap_or(false) as i64,
             v["mandatory"].as_bool().unwrap_or(true) as i64,
+            v["head"].as_str().filter(|s| !s.is_empty()),
+            v["credits"].as_i64().unwrap_or(0),
+            v["is_studio"].as_bool().unwrap_or(false) as i64,
         ],
     ) {
         Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
@@ -5937,8 +5982,9 @@ fn subject_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     match conn.execute(
         "UPDATE subjects SET course_id=?1, name=COALESCE(?2,name), code=?3, type=?4,
-         weekly_periods=COALESCE(?5,weekly_periods), is_lab=COALESCE(?6,is_lab), mandatory=COALESCE(?7,mandatory)
-         WHERE id=?8",
+         weekly_periods=COALESCE(?5,weekly_periods), is_lab=COALESCE(?6,is_lab), mandatory=COALESCE(?7,mandatory),
+         head=COALESCE(?8,head), credits=COALESCE(?9,credits), is_studio=COALESCE(?10,is_studio)
+         WHERE id=?11",
         params![
             v["course_id"].as_i64(),
             v["name"].as_str().filter(|s| !s.is_empty()),
@@ -5947,6 +5993,9 @@ fn subject_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
             v["weekly_periods"].as_i64(),
             v["is_lab"].as_bool().map(|b| b as i64),
             v["mandatory"].as_bool().map(|b| b as i64),
+            v["head"].as_str().map(str::to_string),
+            v["credits"].as_i64(),
+            v["is_studio"].as_bool().map(|b| b as i64),
             id,
         ],
     ) {
@@ -5961,6 +6010,106 @@ fn subject_delete(state: &AppState, id: i64) -> (u16, Value) {
     conn.execute("DELETE FROM teacher_subjects WHERE subject_id=?1", params![id]).ok();
     conn.execute("UPDATE timetable_entries SET subject_id=NULL WHERE subject_id=?1", params![id]).ok();
     conn.execute("DELETE FROM subjects WHERE id=?1", params![id]).ok();
+    (200, json!({"ok": true}))
+}
+
+// ---- architecture: design studios (M1) ----
+
+fn studio_row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+    Ok(json!({
+        "id": r.get::<_, i64>(0)?,
+        "name": r.get::<_, Option<String>>(1)?,
+        "year": r.get::<_, Option<i64>>(2)?,
+        "semester": r.get::<_, Option<i64>>(3)?,
+        "subject_id": r.get::<_, Option<i64>>(4)?,
+        "section_id": r.get::<_, Option<i64>>(5)?,
+        "academic_year_id": r.get::<_, Option<i64>>(6)?,
+        "credits": r.get::<_, i64>(7)?,
+        "coordinator_staff_id": r.get::<_, Option<i64>>(8)?,
+        "subject_name": r.get::<_, Option<String>>(9)?,
+        "coordinator_name": r.get::<_, Option<String>>(10)?,
+    }))
+}
+
+fn studios_list(state: &AppState) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let mut list = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        let mut stmt = conn.prepare(
+            "SELECT s.id, s.name, s.year, s.semester, s.subject_id, s.section_id, \
+             s.academic_year_id, s.credits, s.coordinator_staff_id, sub.name, \
+             (COALESCE(st.first_name,'') || ' ' || COALESCE(st.last_name,'')) \
+             FROM studios s \
+             LEFT JOIN subjects sub ON sub.id = s.subject_id \
+             LEFT JOIN staff st ON st.id = s.coordinator_staff_id \
+             ORDER BY s.year, s.semester, s.name",
+        )?;
+        let mut rows = stmt.query([])?;
+        while let Some(r) = rows.next()? {
+            list.push(studio_row(r)?);
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => (200, json!({"studios": list, "total": list.len()})),
+        Err(_) => (500, json!({"error": "query failed"})),
+    }
+}
+
+fn studio_create(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let name = match v["name"].as_str().filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => return (422, json!({"error": "name required"})),
+    };
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "INSERT INTO studios(name, year, semester, subject_id, section_id, academic_year_id, credits, coordinator_staff_id) \
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+        params![
+            name,
+            v["year"].as_i64(),
+            v["semester"].as_i64(),
+            v["subject_id"].as_i64(),
+            v["section_id"].as_i64(),
+            v["academic_year_id"].as_i64(),
+            v["credits"].as_i64().unwrap_or(0),
+            v["coordinator_staff_id"].as_i64(),
+        ],
+    ) {
+        Ok(_) => (201, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn studio_update(state: &AppState, id: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let conn = state.conn.lock().unwrap();
+    match conn.execute(
+        "UPDATE studios SET name=COALESCE(?1,name), year=?2, semester=?3, subject_id=?4, \
+         section_id=?5, academic_year_id=?6, credits=COALESCE(?7,credits), coordinator_staff_id=?8 \
+         WHERE id=?9",
+        params![
+            v["name"].as_str().filter(|s| !s.is_empty()),
+            v["year"].as_i64(),
+            v["semester"].as_i64(),
+            v["subject_id"].as_i64(),
+            v["section_id"].as_i64(),
+            v["academic_year_id"].as_i64(),
+            v["credits"].as_i64(),
+            v["coordinator_staff_id"].as_i64(),
+            id,
+        ],
+    ) {
+        Ok(0) => (404, json!({"error": "studio not found"})),
+        Ok(_) => (200, json!({"ok": true})),
+        Err(e) => (500, json!({"error": format!("{e}")})),
+    }
+}
+
+fn studio_delete(state: &AppState, id: i64) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    conn.execute("DELETE FROM studios WHERE id=?1", params![id]).ok();
     (200, json!({"ok": true}))
 }
 
@@ -5997,6 +6146,9 @@ fn subject_row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "type": r.get::<_, Option<String>>(4)?,
         "weekly_periods": r.get::<_, i64>(5)?,
         "is_lab": r.get::<_, i64>(6)?,
+        "head": r.get::<_, Option<String>>(7)?,
+        "credits": r.get::<_, i64>(8)?,
+        "is_studio": r.get::<_, i64>(9)?,
     }))
 }
 
@@ -6004,7 +6156,7 @@ fn subjects_list(state: &AppState, url: &str) -> (u16, Value) {
     let q = q_param(url, "q");
     let conn = state.conn.lock().unwrap();
     let mut list = Vec::new();
-    let base = "SELECT id, course_id, name, code, type, weekly_periods, is_lab FROM subjects";
+    let base = "SELECT id, course_id, name, code, type, weekly_periods, is_lab, head, credits, is_studio FROM subjects";
     let res: rusqlite::Result<()> = (|| {
         if let Some(qq) = &q {
             let like = format!("%{}%", qq);
@@ -7035,7 +7187,7 @@ fn seed_teacher_subjects(conn: &Connection) {
 fn school_get(state: &AppState) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let row = conn.query_row(
-        "SELECT name, academic_year, type, address, principal_name, logo, signature, cert_bg, affiliation_no, school_code, udise_code FROM schools ORDER BY id LIMIT 1",
+        "SELECT name, academic_year, type, address, principal_name, logo, signature, cert_bg, affiliation_no, school_code, udise_code, coa_reg_no, sanctioned_intake FROM schools ORDER BY id LIMIT 1",
         [],
         |r| {
             Ok((
@@ -7050,11 +7202,13 @@ fn school_get(state: &AppState) -> (u16, Value) {
                 r.get::<_, Option<String>>(8)?,
                 r.get::<_, Option<String>>(9)?,
                 r.get::<_, Option<String>>(10)?,
+                r.get::<_, Option<String>>(11)?,
+                r.get::<_, Option<i64>>(12)?,
             ))
         },
     );
     match row {
-        Ok((name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code)) => (
+        Ok((name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code, coa_reg_no, sanctioned_intake)) => (
             200,
             json!({"school": {
                 "name": name, "academic_year": ay,
@@ -7062,6 +7216,7 @@ fn school_get(state: &AppState) -> (u16, Value) {
                 "address": address, "principal_name": principal,
                 "logo": logo, "signature": signature, "cert_bg": cert_bg,
                 "affiliation_no": affiliation_no, "school_code": school_code, "udise_code": udise_code,
+                "coa_reg_no": coa_reg_no, "sanctioned_intake": sanctioned_intake,
             }}),
         ),
         Err(_) => (200, json!({"school": Value::Null})),
@@ -7081,6 +7236,8 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     let affiliation_no = v["affiliation_no"].as_str().filter(|s| !s.is_empty());
     let school_code = v["school_code"].as_str().filter(|s| !s.is_empty());
     let udise_code = v["udise_code"].as_str().filter(|s| !s.is_empty());
+    let coa_reg_no = v["coa_reg_no"].as_str().filter(|s| !s.is_empty());
+    let sanctioned_intake = v["sanctioned_intake"].as_i64();
     let conn = state.conn.lock().unwrap();
     let existing: Option<i64> = conn
         .query_row("SELECT id FROM schools ORDER BY id LIMIT 1", [], |r| r.get(0))
@@ -7088,14 +7245,14 @@ fn school_save(state: &AppState, body: &str) -> (u16, Value) {
     match existing {
         Some(id) => {
             let _ = conn.execute(
-                "UPDATE schools SET name=?1, academic_year=?2, type=?3, address=?4, principal_name=?5, logo=?6, signature=?7, cert_bg=?8, affiliation_no=?9, school_code=?10, udise_code=?11 WHERE id=?12",
-                params![name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code, id],
+                "UPDATE schools SET name=?1, academic_year=?2, type=?3, address=?4, principal_name=?5, logo=?6, signature=?7, cert_bg=?8, affiliation_no=?9, school_code=?10, udise_code=?11, coa_reg_no=?12, sanctioned_intake=?13 WHERE id=?14",
+                params![name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code, coa_reg_no, sanctioned_intake, id],
             );
         }
         None => {
             let _ = conn.execute(
-                "INSERT INTO schools(name, academic_year, type, address, principal_name, logo, signature, cert_bg, affiliation_no, school_code, udise_code) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
-                params![name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code],
+                "INSERT INTO schools(name, academic_year, type, address, principal_name, logo, signature, cert_bg, affiliation_no, school_code, udise_code, coa_reg_no, sanctioned_intake) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                params![name, ay, typ, address, principal, logo, signature, cert_bg, affiliation_no, school_code, udise_code, coa_reg_no, sanctioned_intake],
             );
         }
     }

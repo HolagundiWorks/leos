@@ -5,6 +5,7 @@ import {
   Card,
   Container,
   Group,
+  NumberInput,
   Select,
   Stack,
   Text,
@@ -33,6 +34,8 @@ export function InstitutionSettingsScreen() {
   const [logo, setLogo] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
   const [certBg, setCertBg] = useState<string | null>(null);
+  const [coaRegNo, setCoaRegNo] = useState('');
+  const [sanctionedIntake, setSanctionedIntake] = useState<number | null>(null);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   useEffect(() => {
@@ -45,15 +48,18 @@ export function InstitutionSettingsScreen() {
       setLogo(data.logo ?? null);
       setSignature(data.signature ?? null);
       setCertBg(data.cert_bg ?? null);
+      setCoaRegNo(data.coa_reg_no ?? '');
+      setSanctionedIntake(data.sanctioned_intake ?? null);
     }
   }, [data]);
 
   const terms = termsFor(type);
+  const isArchitecture = type === 'architecture';
 
   const save = async () => {
     setStatus('saving');
     try {
-      await saveSchool(token, { name, academic_year: ay, type, address, principal_name: principal, logo, signature, cert_bg: certBg });
+      await saveSchool(token, { name, academic_year: ay, type, address, principal_name: principal, logo, signature, cert_bg: certBg, coa_reg_no: coaRegNo, sanctioned_intake: sanctionedIntake });
       await qc.invalidateQueries({ queryKey: ['school'] });
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 1800);
@@ -108,6 +114,29 @@ export function InstitutionSettingsScreen() {
               value={principal}
               onChange={(e) => setPrincipal(e.currentTarget.value)}
             />
+
+            {isArchitecture && (
+              <>
+                <Text size="sm" fw={600} mt="xs">COA compliance</Text>
+                <Group grow align="flex-start">
+                  <TextInput
+                    label="COA registration no."
+                    description="Council of Architecture approval / registration."
+                    placeholder="CA/2020/12345"
+                    value={coaRegNo}
+                    onChange={(e) => setCoaRegNo(e.currentTarget.value)}
+                  />
+                  <NumberInput
+                    label="Sanctioned intake"
+                    description="Approved seats per year (B.Arch)."
+                    placeholder="40"
+                    min={0}
+                    value={sanctionedIntake ?? undefined}
+                    onChange={(v) => setSanctionedIntake(typeof v === 'number' ? v : null)}
+                  />
+                </Group>
+              </>
+            )}
 
             <Text size="sm" fw={600} mt="xs">Branding &amp; letterhead</Text>
             <ImageUpload
