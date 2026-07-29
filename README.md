@@ -19,6 +19,10 @@ No internet. No server to maintain. No monthly subscription.
 > [`docs/architecture-education-revision.md`](docs/architecture-education-revision.md),
 > and the implementation architecture in
 > [`docs/architecture-education-system-design.md`](docs/architecture-education-system-design.md).
+> A proposed split into a **student desktop client** (built-in CAD/BIM/PDF
+> viewers + on-device AI tutor) and a **lecturer web app** around a sync hub is
+> drafted in
+> [`docs/two-app-split-architecture.md`](docs/two-app-split-architecture.md).
 > The generic school/college modes remain available during the transition.
 
 ---
