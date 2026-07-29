@@ -5,6 +5,18 @@ Offline-first, desktop-first school OS. All data in a single portable `.leosdb` 
 
 Status: ✅ done · 🟡 partial · ⬜ not started
 
+> **This document describes the shipped single-app architecture.** LEOS is being
+> refocused as a dedicated **architecture-education platform** and split into a
+> **student desktop client** + **lecturer web app** around a networked **sync
+> hub**. The target architecture and the milestone plan to get there live in:
+> - [`docs/architecture-education-revision.md`](docs/architecture-education-revision.md) — research + why/what
+> - [`docs/architecture-education-system-design.md`](docs/architecture-education-system-design.md) — studio/jury data model, API, screens
+> - [`docs/two-app-split-architecture.md`](docs/two-app-split-architecture.md) — two-app + hub topology, sync/push protocol, on-device AI
+> - [`ROADMAP.md`](ROADMAP.md) — the M0–M7 delivery roadmap
+>
+> The runtime model below stays accurate through **M1**; the hub/sync topology
+> supersedes the single-server model from **M2** onward.
+
 ---
 
 ## Stack

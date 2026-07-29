@@ -166,7 +166,10 @@ Keyboard shortcuts: `Ctrl-K` command palette, `Alt-1…8` tab shortcuts.
 | Doc | Description |
 |-----|-------------|
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Runtime model, navigation, module map |
-| [`ROADMAP.md`](ROADMAP.md) | Feature completion tracker |
+| [`ROADMAP.md`](ROADMAP.md) | Feature completion tracker + architecture-education milestone roadmap |
+| [`docs/architecture-education-revision.md`](docs/architecture-education-revision.md) | Research + why/what: refocusing LEOS on architecture education |
+| [`docs/architecture-education-system-design.md`](docs/architecture-education-system-design.md) | How: studio/jury/portfolio data model, API, and screens |
+| [`docs/two-app-split-architecture.md`](docs/two-app-split-architecture.md) | Student desktop + lecturer web + sync hub design |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production build and release checklist |
 | [`docs/server-control.md`](docs/server-control.md) | Service Manager and sidecar architecture |
 | [`test-plan.md`](test-plan.md) | Automated test strategy |

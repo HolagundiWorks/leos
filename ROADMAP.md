@@ -1,32 +1,176 @@
 # LEOS — Build Roadmap
 
 Learning Environment Operating System by Holagundi Consulting Works.
-Offline-first desktop school OS: Tauri v2 + React/Mantine + Rust API + SQLite.
+Offline-first education OS: Tauri v2 + React/Mantine + Rust API + SQLite.
+
+**Direction:** LEOS is being refocused as a **dedicated architecture-education
+platform** and split into a **student desktop client** (built-in CAD/BIM/PDF
+viewers + on-device AI tutor) and a **lecturer web app** around a networked
+**sync hub**. This document is the single roadmap for that programme; the
+**foundation is already shipped** (see *Part 3*, the existing school OS).
 
 Legend: ✅ done · 🟡 in progress · ⬜ planned
 
----
-
-## Architecture-education focus (AE) — in progress
-
-Refocusing LEOS as a dedicated school-of-architecture OS. Full research + plan:
-[`docs/architecture-education-revision.md`](docs/architecture-education-revision.md);
-implementation architecture:
-[`docs/architecture-education-system-design.md`](docs/architecture-education-system-design.md).
-
-- ✅ **Phase 0** — `architecture` institution type + studio vocabulary
-  (Programme / Studio / Subject / Year / Jury, "Studio Faculty"); default for new
-  school files; revision proposal doc
-- ⬜ **Phase 1** — subject heads + credits + `is_studio`; visiting-faculty flag;
-  NATA/JEE-2 + programme/batch on students; COA reg. no.; studio timetable blocks
-- ⬜ **Phase 2** — Jury OS (reframe Exam OS): panels with external examiners,
-  per-criterion grade + written crit, pin-up scheduling, attendance-eligibility gate
-- ⬜ **Phase 3** — Portfolio (per-student / per-studio sheets, model photos, drawings)
-- ⬜ **Phase 4** — Internship (professional training logbook + assessment) & Design Thesis
-  (milestones, pre-/final jury/viva)
-- ⬜ **Phase 5** — COA/MSAR compliance & disclosure; visiting-load ratio check
+Design references:
+[revision (why/what)](docs/architecture-education-revision.md) ·
+[system design (how)](docs/architecture-education-system-design.md) ·
+[two-app split](docs/two-app-split-architecture.md).
 
 ---
+
+# Part 1 — Architecture-education platform (detailed roadmap)
+
+Milestones are **dependency-ordered**; each is independently shippable and
+leaves the app releasable. Two work-streams interleave: **Domain** (studio
+pedagogy) and **Topology** (the two-app split). The phase tags in parentheses
+map back to the design docs (AE = system-design Phases; S = split Phases).
+
+| # | Milestone | Streams | Depends on | Status |
+|---|---|---|---|---|
+| **M0** | Vocabulary + design docs | Domain, Topology | — | ✅ |
+| **M1** | Studio domain foundation | Domain (AE1) | M0 | ⬜ |
+| **M2** | Hub networking + sync engine | Topology (S-A, S-B) | M1 | ⬜ |
+| **M3** | Lecturer web app + Jury OS | Both (S-C, AE2) | M2 | ⬜ |
+| **M4** | Student desktop core + Portfolio | Both (S-D, AE3) | M2 | ⬜ |
+| **M5** | On-device AI tutor | Topology (S-E) | M4 | ⬜ |
+| **M6** | Internship + Design Thesis | Domain (AE4) | M3, M4 | ⬜ |
+| **M7** | COA/MSAR compliance + offline hand-off + scale | Both (AE5, S-F) | M3, M4 | ⬜ |
+
+---
+
+## M0 — Vocabulary & design ✅
+
+- ✅ `architecture` institution type + studio vocabulary
+  (Programme / Studio / Subject / Year / Jury, "Studio Faculty");
+  default for new school files (`frontend/src/lib/institution.ts`)
+- ✅ Research + revision proposal, system-design doc, two-app split doc
+- ✅ README / ROADMAP positioning
+
+## M1 — Studio domain foundation ⬜
+
+Single-app still; additive and non-breaking.
+
+- ⬜ `subjects` gains `head` (core / building-science / hss / elective),
+  `credits`, `is_studio` (idempotent `ALTER TABLE`)
+- ⬜ `staff` gains `is_visiting`, `coa_reg_no`, `qualification`
+- ⬜ `students` gains `programme`, `batch_year`, `nata_score`, `jee2_score`
+- ⬜ `schools` gains `coa_reg_no`, `sanctioned_intake`
+- ⬜ `studios` table + `/studios` CRUD + `StudiosScreen.tsx` on Academics tab
+- ⬜ `periods.period_type = 'studio'` for long (3–4 hr) timetable blocks
+- ⬜ Compliance stub in Institution Settings (COA reg. no., intake)
+- **Acceptance:** create an architecture file, define programme/year/studio,
+  tag studio subjects with credits; an existing `school` file opens unchanged
+  (migration-safety test).
+
+## M2 — Hub networking + sync engine ⬜
+
+Pure backend/plumbing; the current UI keeps working against the hub.
+
+- ⬜ JWT auth (role claim → L1–L5) on top of existing bcrypt
+- ⬜ Revision columns (`revision`, `updated_at`, `deleted`) on syncable tables
+- ⬜ `GET /sync/changes`, `POST /sync/submit`, `GET/PUT /blobs/:hash`
+- ⬜ WebSocket `/events` push signal (SSE / poll fallback)
+- ⬜ `/packages/sync-client` — cursors, outbox/inbox, content-addressed blob transfer
+- ⬜ Client-side local SQLite cache
+- **Acceptance:** two processes sync a note + attachment via push-signal → pull;
+  submissions survive an offline→online cycle (idempotent, no dupes).
+
+## M3 — Lecturer web app + Jury OS ⬜
+
+- ⬜ Web (Vite) build of the shared UI; hub-backed auth
+- ⬜ Notes authoring (markdown + attachments), scoped to studio/subject → publish
+- ⬜ Assignment briefs (due date, deliverables, rubric) → publish
+- ⬜ Submission inbox + grading against rubric → `jury_marks` + written feedback
+- ⬜ Jury OS: `juries`, `jury_panel` (internal + external examiners),
+  `jury_marks`; pin-up scheduling reusing timetable conflict detection
+- ⬜ Attendance-eligibility gate (COA min-attendance) on final juries
+- ⬜ Announcements + timetable publish (reuse Event/Timetable OS + revision cols)
+- **Acceptance:** a lecturer publishes a note + assignment and grades a
+  submission entirely in the browser; students receive all three via sync.
+
+## M4 — Student desktop core + Portfolio ⬜
+
+- ⬜ Assignment workspace: pull brief + references, work offline, attach
+  deliverables, **submit** (immutable versions via outbox)
+- ⬜ Built-in viewers in the WebView: **pdf.js** (PDF), **web-ifc** (BIM/IFC),
+  **dxf-viewer** (CAD/DXF)
+- ⬜ `portfolio_items` + media in the `.leosdb` `media/`; `PortfolioScreen.tsx`
+  and a Portfolio tab on the student profile
+- **Acceptance:** a student pulls an assignment, opens an IFC/DXF/PDF reference,
+  attaches deliverables, submits offline, and it reaches the lecturer on reconnect.
+
+## M5 — On-device AI tutor ⬜
+
+- ⬜ `ai-runtime` sidecar (llama.cpp-style) supervised via the existing
+  `ServerController` trait; optional model download + tiny bundled fallback
+- ⬜ Local RAG over synced notes/briefs/PDFs (`sqlite-vec` embeddings index)
+- ⬜ Explain-selection (IFC element / DXF region / PDF text)
+- ⬜ Generated learning environments (guided modules, flashcards, self-quizzes)
+- **Acceptance:** with the network off, the tutor answers grounded in the
+  student's synced course material; no data leaves the device.
+
+## M6 — Internship + Design Thesis ⬜
+
+- ⬜ `internships` + `internship_log` — firm, COA-registered mentor, dates,
+  stipend, logbook, on-return assessment; `InternshipScreen.tsx`
+- ⬜ `theses` + `thesis_milestones` — topic approval, guide, milestones,
+  pre-/final jury + viva, report; `ThesisScreen.tsx`
+- ⬜ Both gate progression per COA rules
+- **Acceptance:** a student's professional-training semester and final thesis are
+  tracked end-to-end with logbook and viva grade.
+
+## M7 — Compliance, offline hand-off & scale ⬜
+
+- ⬜ `/architecture/compliance` — sanctioned vs enrolled intake, visiting-load %
+  (25–50 % band), student:faculty ratio, studio-area coverage; read-only panel
+- ⬜ Attendance-eligibility reports (export)
+- ⬜ `.leospack` bundle export/import for air-gapped hand-off
+- ⬜ Postgres storage option behind the DB trait for multi-school deployments
+- **Acceptance:** MSAR summary renders for an inspection; a course bundle moves
+  between two offline machines and re-syncs cleanly.
+
+---
+
+## Cross-cutting (carried through all milestones)
+
+| Item | Notes |
+|---|---|
+| License diligence | pdf.js / web-ifc / llama.cpp / DWG-conversion vs GPLv2 — prerequisite for M4–M5 (see split doc §10) |
+| Monorepo refactor | `/hub`, `/apps/{student-desktop,lecturer-web}`, `/packages/{ui,sync-client,viewers,domain}` — lands incrementally from M2 |
+| Testing | Rust unit tests (eligibility, jury conflicts, visiting-load); Playwright happy-paths; migration-safety regression |
+| Security/privacy | TLS + JWT on the hub; on-device AI (zero egress); immutable, audited submissions |
+
+## Open decisions (blocking the noted milestones)
+
+1. **Hub hosting** — self-hosted campus LAN (recommended) vs cloud/multi-tenant — *M2*
+2. **Local AI packaging** — bundled model vs optional download (recommended) — *M5*
+3. **Minimum student hardware** for the local LLM — *M5*
+4. **Grading scale** — rubric score vs letter/GPA (`jury_marks` stores both) — *M3*
+5. **DWG/RVT support depth** — native-convert vs bring-your-own IFC/DXF — *M4*
+6. **Retire generic school/college modes** once fully architecture-dedicated? — *M1+*
+
+---
+
+# Part 2 — Near-term backlog (pre-existing)
+
+Legacy school-OS items still open, folded into the milestones above where they
+overlap (attendance export → M7; report cards/ranking → superseded by Jury OS in
+M3; LAN mode → M2).
+
+| Item | Maps to |
+|---|---|
+| Attendance reports + export (PDF/Excel) | M7 |
+| Report cards / ranking engine | Superseded by Jury OS (M3) |
+| LAN server/client mode | Generalised into the Hub (M2) |
+| Installer signing + auto-update | Production hardening |
+| At-rest encryption (SQLCipher) | Production hardening |
+
+---
+
+# Part 3 — Foundation (shipped school OS)
+
+The sections below record the **already-built** LEOS school OS that this
+programme builds on. Status as of the open-source release.
 
 ## Foundation (P0) ✅
 
