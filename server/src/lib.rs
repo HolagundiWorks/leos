@@ -788,6 +788,23 @@ fn dispatch(
         }
     }
     // Event Management OS (P7)
+    // --- hub sync spine (M2) ---
+    if method == &Method::Get && path == "/sync/changes" {
+        return with_auth(state, token, |_| sync_changes(state, url));
+    }
+    if method == &Method::Get && path == "/sync/cursor" {
+        return with_auth(state, token, |u| sync_cursor_get(state, u, url));
+    }
+    if method == &Method::Post && path == "/sync/cursor" {
+        return with_auth(state, token, |u| sync_cursor_set(state, u, body));
+    }
+    if method == &Method::Post && path == "/blobs" {
+        return with_auth(state, token, |_| blob_put(state, body));
+    }
+    if method == &Method::Get && path.starts_with("/blobs/") {
+        let hash = &path["/blobs/".len()..];
+        return with_auth(state, token, |_| blob_get(state, hash));
+    }
     if method == &Method::Get && path == "/announcements" {
         return with_auth(state, token, |_| announcements_list(state, url));
     }
@@ -2223,6 +2240,28 @@ fn migrate_schema(conn: &Connection) {
          created_at TEXT DEFAULT (datetime('now')))",
         [],
     );
+
+    // --- hub sync spine (M2) ---
+    // Content-addressed blob store (base64/data-URL payloads, deduped by the
+    // SHA-256 of the stored representation), a monotonic revision counter (in
+    // settings key 'sync_seq'), per-user pull cursors, and delete tombstones so
+    // pull-based sync can propagate deletions without soft-deleting live rows.
+    // See docs/two-app-split-architecture.md §5.
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS blobs(hash TEXT PRIMARY KEY, size_bytes INTEGER, data TEXT, created_at TEXT DEFAULT (datetime('now')))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_cursors(user_id INTEGER, channel TEXT, since_revision INTEGER DEFAULT 0, updated_at TEXT, PRIMARY KEY(user_id, channel))",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_tombstones(id INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT NOT NULL, row_id INTEGER NOT NULL, revision INTEGER NOT NULL)",
+        [],
+    );
+    // Revision bookkeeping on the first synced channel (announcements).
+    let _ = conn.execute("ALTER TABLE announcements ADD COLUMN revision INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE announcements ADD COLUMN updated_at TEXT", []);
 }
 
 fn init_db(conn: &Connection) {
@@ -3682,6 +3721,162 @@ fn activity_expense_delete(state: &AppState, id: i64) -> (u16, Value) {
 
 // ---- Event Management OS (P7) ----
 
+// ---- hub sync spine (M2) ----
+
+/// Bump and return the global monotonic revision counter (settings.sync_seq).
+/// Safe under the single connection Mutex — all DB access is serialised.
+fn next_revision(conn: &Connection) -> i64 {
+    let cur: i64 = conn
+        .query_row("SELECT value FROM settings WHERE key='sync_seq'", [], |r| r.get::<_, String>(0))
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let next = cur + 1;
+    let _ = conn.execute(
+        "INSERT INTO settings(key, value) VALUES('sync_seq', ?1) ON CONFLICT(key) DO UPDATE SET value=?1",
+        params![next.to_string()],
+    );
+    next
+}
+
+/// Stamp a channel row with a fresh revision + updated_at (call after a write).
+fn sync_bump(conn: &Connection, table: &str, id: i64) {
+    let rev = next_revision(conn);
+    let _ = conn.execute(
+        &format!("UPDATE {table} SET revision=?1, updated_at=datetime('now') WHERE id=?2"),
+        params![rev, id],
+    );
+}
+
+/// Record a delete so pull-based sync can propagate it.
+fn sync_tombstone(conn: &Connection, channel: &str, row_id: i64) {
+    let rev = next_revision(conn);
+    let _ = conn.execute(
+        "INSERT INTO sync_tombstones(channel, row_id, revision) VALUES(?1,?2,?3)",
+        params![channel, row_id, rev],
+    );
+}
+
+/// GET /sync/changes?channel=announcements&since=N
+/// Returns rows changed after `since`, delete tombstones, and the current cursor.
+fn sync_changes(state: &AppState, url: &str) -> (u16, Value) {
+    let channel = q_param(url, "channel").unwrap_or_default();
+    let since: i64 = q_param(url, "since").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let conn = state.conn.lock().unwrap();
+    let cursor: i64 = conn
+        .query_row("SELECT value FROM settings WHERE key='sync_seq'", [], |r| r.get::<_, String>(0))
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    let mut changes: Vec<Value> = Vec::new();
+    let res: rusqlite::Result<()> = (|| {
+        match channel.as_str() {
+            "announcements" => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, title, body, audience, is_draft, published_at, revision \
+                     FROM announcements WHERE revision > ?1 ORDER BY revision",
+                )?;
+                let mut rows = stmt.query(params![since])?;
+                while let Some(r) = rows.next()? {
+                    changes.push(json!({
+                        "id": r.get::<_, i64>(0)?,
+                        "title": r.get::<_, Option<String>>(1)?,
+                        "body": r.get::<_, Option<String>>(2)?,
+                        "audience": r.get::<_, Option<String>>(3)?,
+                        "is_draft": r.get::<_, i64>(4)?,
+                        "published_at": r.get::<_, Option<String>>(5)?,
+                        "revision": r.get::<_, i64>(6)?,
+                    }));
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    })();
+    if let Err(e) = res {
+        return (500, json!({"error": format!("{e}")}));
+    }
+
+    let mut deletes: Vec<i64> = Vec::new();
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT row_id FROM sync_tombstones WHERE channel=?1 AND revision > ?2 ORDER BY revision",
+    ) {
+        if let Ok(mut rows) = stmt.query(params![channel, since]) {
+            while let Ok(Some(r)) = rows.next() {
+                if let Ok(id) = r.get::<_, i64>(0) {
+                    deletes.push(id);
+                }
+            }
+        }
+    }
+
+    (200, json!({"channel": channel, "cursor": cursor, "changes": changes, "deletes": deletes}))
+}
+
+/// GET /sync/cursor?channel=… — the caller's stored pull position.
+fn sync_cursor_get(state: &AppState, uid: i64, url: &str) -> (u16, Value) {
+    let channel = q_param(url, "channel").unwrap_or_default();
+    let conn = state.conn.lock().unwrap();
+    let since: i64 = conn
+        .query_row(
+            "SELECT since_revision FROM sync_cursors WHERE user_id=?1 AND channel=?2",
+            params![uid, channel],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    (200, json!({"channel": channel, "since": since}))
+}
+
+/// POST /sync/cursor  { channel, since } — persist the caller's pull position.
+fn sync_cursor_set(state: &AppState, uid: i64, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let channel = match v["channel"].as_str().filter(|s| !s.is_empty()) {
+        Some(c) => c.to_string(),
+        None => return (422, json!({"error": "channel required"})),
+    };
+    let since = v["since"].as_i64().unwrap_or(0);
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "INSERT INTO sync_cursors(user_id, channel, since_revision, updated_at) VALUES(?1,?2,?3,datetime('now')) \
+         ON CONFLICT(user_id, channel) DO UPDATE SET since_revision=?3, updated_at=datetime('now')",
+        params![uid, channel, since],
+    );
+    (200, json!({"ok": true}))
+}
+
+/// POST /blobs  { data } — store a base64/data-URL payload, addressed by the
+/// SHA-256 of that representation. Idempotent (dedup on hash). Returns the hash.
+fn blob_put(state: &AppState, body: &str) -> (u16, Value) {
+    let v: Value = serde_json::from_str(body).unwrap_or(json!({}));
+    let data = match v["data"].as_str().filter(|s| !s.is_empty()) {
+        Some(d) => d.to_string(),
+        None => return (422, json!({"error": "data required"})),
+    };
+    let hash = sha256_hex(data.as_bytes());
+    let size = data.len() as i64;
+    let conn = state.conn.lock().unwrap();
+    let _ = conn.execute(
+        "INSERT INTO blobs(hash, size_bytes, data) VALUES(?1,?2,?3) ON CONFLICT(hash) DO NOTHING",
+        params![hash, size, data],
+    );
+    (200, json!({"ok": true, "hash": hash, "size": size}))
+}
+
+/// GET /blobs/:hash — fetch a stored blob's payload.
+fn blob_get(state: &AppState, hash: &str) -> (u16, Value) {
+    let conn = state.conn.lock().unwrap();
+    let row = conn.query_row(
+        "SELECT size_bytes, data FROM blobs WHERE hash=?1",
+        params![hash],
+        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
+    );
+    match row {
+        Ok((size, data)) => (200, json!({"hash": hash, "size": size, "data": data})),
+        Err(_) => (404, json!({"error": "blob not found"})),
+    }
+}
+
 fn announcements_list(state: &AppState, url: &str) -> (u16, Value) {
     let audience = q_param(url, "audience");
     let draft_only = q_param(url, "draft").map(|v| v == "1").unwrap_or(false);
@@ -3724,7 +3919,11 @@ fn announcement_create(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
         "INSERT INTO announcements(title, body, audience, is_draft, published_at, created_by) VALUES(?1,?2,?3,?4,CASE WHEN ?5=0 THEN datetime('now') ELSE NULL END,?6)",
         params![title, body_text, audience, is_draft, is_draft, uid],
     ) {
-        Ok(_) => (200, json!({"ok": true, "id": conn.last_insert_rowid()})),
+        Ok(_) => {
+            let id = conn.last_insert_rowid();
+            sync_bump(&conn, "announcements", id);
+            (200, json!({"ok": true, "id": id}))
+        }
         Err(e) => (500, json!({"error": format!("{e}")})),
     }
 }
@@ -3732,12 +3931,14 @@ fn announcement_create(state: &AppState, body: &str, uid: i64) -> (u16, Value) {
 fn announcement_publish(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let _ = conn.execute("UPDATE announcements SET is_draft=0, published_at=datetime('now') WHERE id=?1", params![id]);
+    sync_bump(&conn, "announcements", id);
     (200, json!({"ok": true}))
 }
 
 fn announcement_delete(state: &AppState, id: i64) -> (u16, Value) {
     let conn = state.conn.lock().unwrap();
     let _ = conn.execute("DELETE FROM announcements WHERE id=?1", params![id]);
+    sync_tombstone(&conn, "announcements", id);
     (200, json!({"ok": true}))
 }
 

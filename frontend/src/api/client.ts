@@ -1092,6 +1092,29 @@ export function clearTimetableEntry(
   return req<{ ok: boolean }>('/timetable/clear', { method: 'POST', token, body: data });
 }
 
+// --- hub sync spine (M2) ---
+export interface SyncChanges<T = Record<string, unknown>> {
+  channel: string;
+  cursor: number;
+  changes: T[];
+  deletes: number[];
+}
+export function fetchSyncChanges<T = Record<string, unknown>>(token: string, channel: string, since: number) {
+  return req<SyncChanges<T>>(`/sync/changes?channel=${encodeURIComponent(channel)}&since=${since}`, { token });
+}
+export function fetchSyncCursor(token: string, channel: string) {
+  return req<{ channel: string; since: number }>(`/sync/cursor?channel=${encodeURIComponent(channel)}`, { token });
+}
+export function saveSyncCursor(token: string, channel: string, since: number) {
+  return req<{ ok: boolean }>('/sync/cursor', { method: 'POST', token, body: { channel, since } });
+}
+export function putBlob(token: string, data: string) {
+  return req<{ ok: boolean; hash: string; size: number }>('/blobs', { method: 'POST', token, body: { data } });
+}
+export function getBlob(token: string, hash: string) {
+  return req<{ hash: string; size: number; data: string }>(`/blobs/${hash}`, { token });
+}
+
 export interface Period {
   id?: number;
   label: string;

@@ -29,7 +29,7 @@ map back to the design docs (AE = system-design Phases; S = split Phases).
 |---|---|---|---|---|
 | **M0** | Vocabulary + design docs | Domain, Topology | — | ✅ |
 | **M1** | Studio domain foundation | Domain (AE1) | M0 | ✅ |
-| **M2** | Hub networking + sync engine | Topology (S-A, S-B) | M1 | ⬜ |
+| **M2** | Hub networking + sync engine | Topology (S-A, S-B) | M1 | 🟡 |
 | **M3** | Lecturer web app + Jury OS | Both (S-C, AE2) | M2 | ⬜ |
 | **M4** | Student desktop core + Portfolio | Both (S-D, AE3) | M2 | ⬜ |
 | **M5** | On-device AI tutor | Topology (S-E) | M4 | ⬜ |
@@ -68,18 +68,32 @@ Single-app still; additive and non-breaking.
   with programme/batch/NATA/JEE-2, and save a studio timetable slot; an existing
   `school` file takes the additive `ALTER`s and still opens/serves unchanged.
 
-## M2 — Hub networking + sync engine ⬜
+## M2 — Hub networking + sync engine 🟡
 
-Pure backend/plumbing; the current UI keeps working against the hub.
+Decision locked: **self-hosted campus LAN hub** (preserves the offline,
+no-subscription ethos). Pure backend/plumbing; the current UI keeps working.
 
-- ⬜ JWT auth (role claim → L1–L5) on top of existing bcrypt
-- ⬜ Revision columns (`revision`, `updated_at`, `deleted`) on syncable tables
-- ⬜ `GET /sync/changes`, `POST /sync/submit`, `GET/PUT /blobs/:hash`
-- ⬜ WebSocket `/events` push signal (SSE / poll fallback)
-- ⬜ `/packages/sync-client` — cursors, outbox/inbox, content-addressed blob transfer
-- ⬜ Client-side local SQLite cache
-- **Acceptance:** two processes sync a note + attachment via push-signal → pull;
-  submissions survive an offline→online cycle (idempotent, no dupes).
+- ✅ Content-addressed blob store — `POST /blobs` (dedup by SHA-256 of the stored
+  representation), `GET /blobs/:hash`; base64/data-URL payloads, consistent with
+  existing media handling
+- ✅ Revision spine — monotonic `sync_seq`, `sync_cursors`, `sync_tombstones`;
+  `revision`/`updated_at` on the first synced channel (announcements), bumped on
+  create/publish, tombstoned on delete (non-breaking — live lists unchanged)
+- ✅ `GET /sync/changes?channel=&since=` (delta + delete tombstones + cursor) and
+  `GET`/`POST /sync/cursor` (per-user pull position)
+- ✅ Frontend sync engine (`frontend/src/lib/sync.ts`) — per-channel cursor
+  (localStorage, offline-safe), pull-and-apply with at-least-once delivery,
+  blob upload/download; API client functions
+- ⬜ JWT auth (role claim → L1–L5) — still on the in-memory bearer-session map;
+  hardening pending
+- ⬜ WebSocket `/events` push signal (today: pull/poll; logic is push-ready)
+- ⬜ `POST /sync/submit` up-channel — lands with M3 (needs submission tables)
+- ⬜ `/packages/sync-client` extraction (currently in `frontend/src/lib`) — the
+  monorepo refactor is the cross-cutting track below
+- **Acceptance:** ✅ verified end-to-end — create/publish/delete an announcement
+  and pull the delta by cursor (no re-delivery on an up-to-date cursor; deletes
+  arrive as tombstones); blob put/get round-trips and dedups by hash. Push-signal
+  and the submit up-channel remain (above).
 
 ## M3 — Lecturer web app + Jury OS ⬜
 
