@@ -1095,7 +1095,7 @@ export function clearTimetableEntry(
 export interface Period {
   id?: number;
   label: string;
-  period_type: 'period' | 'break';
+  period_type: 'period' | 'break' | 'studio';
   start_time: string;
   end_time: string;
   sort_order?: number;

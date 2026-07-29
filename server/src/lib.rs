@@ -1343,6 +1343,8 @@ const STUDENT_COLS: &[&str] = &[
     "permanent_address", "photo", "emergency_contact", "medical_notes", "card_uid",
     "admission_date", "admission_class", "previous_school", "previous_board", "tc_number", "migration_number", "verification_status",
     "status",
+    // architecture-education admission (M1)
+    "programme", "batch_year", "nata_score", "jee2_score",
 ];
 
 fn student_create(state: &AppState, body: &str) -> (u16, Value) {
@@ -3011,7 +3013,7 @@ fn json_to_sqlite(v: &Value, col: &str) -> rusqlite::types::Value {
         Value::Null => V::Null,
         Value::String(s) if s.is_empty() => V::Null,
         Value::String(s) => V::Text(s.clone()),
-        Value::Number(n) => n.as_i64().map(V::Integer).unwrap_or(V::Null),
+        Value::Number(n) => n.as_i64().map(V::Integer).or_else(|| n.as_f64().map(V::Real)).unwrap_or(V::Null),
         Value::Bool(b) => V::Integer(*b as i64),
         _ => V::Null,
     }

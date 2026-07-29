@@ -19,6 +19,7 @@ import { BadgeCheck, GraduationCap, HeartPulse, Lock, Users } from 'lucide-react
 import type { StudentDetail, StudentFormData } from '../api/client';
 import { ApiError, createStudent, updateStudent } from '../api/client';
 import { useAuth } from '../stores/auth';
+import { useSchool } from '../hooks/useSchool';
 import { ImageUpload } from './ImageUpload';
 
 interface Props {
@@ -40,6 +41,8 @@ export function StudentFormModal({ onClose, initial }: Props) {
   const token = useAuth((s) => s.token)!;
   const qc = useQueryClient();
   const isEdit = !!initial;
+  const { data: school } = useSchool();
+  const isArchitecture = school?.type === 'architecture';
 
   const [f, setF] = useState<FormState>(() =>
     initial
@@ -182,6 +185,27 @@ export function StudentFormModal({ onClose, initial }: Props) {
               {txt('Migration Certificate No.', 'migration_number')}
               {sel('Lifecycle status', 'status', LIFECYCLE, false)}
             </SimpleGrid>
+            {isArchitecture && (
+              <>
+                <Divider label="Architecture programme (COA)" labelPosition="left" />
+                <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="sm">
+                  <Select
+                    label="Programme"
+                    data={[
+                      { value: 'barch', label: 'B.Arch (5-year)' },
+                      { value: 'march', label: 'M.Arch' },
+                      { value: 'phd', label: 'PhD' },
+                    ]}
+                    value={(f.programme as string) ?? null}
+                    onChange={(v) => up('programme', v)}
+                    clearable
+                  />
+                  {txt('Batch (year of admission)', 'batch_year', { type: 'number', placeholder: '2026' })}
+                  {txt('NATA score', 'nata_score', { type: 'number', placeholder: 'e.g. 120' })}
+                  {txt('JEE Paper-2 score', 'jee2_score', { type: 'number' })}
+                </SimpleGrid>
+              </>
+            )}
             <Checkbox label="Mark as enrolled (counts toward class strength)" checked={!!f.enrolled} onChange={(e) => up('enrolled', e.currentTarget.checked)} />
           </Stack>
         </Tabs.Panel>

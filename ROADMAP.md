@@ -28,7 +28,7 @@ map back to the design docs (AE = system-design Phases; S = split Phases).
 | # | Milestone | Streams | Depends on | Status |
 |---|---|---|---|---|
 | **M0** | Vocabulary + design docs | Domain, Topology | — | ✅ |
-| **M1** | Studio domain foundation | Domain (AE1) | M0 | 🟡 |
+| **M1** | Studio domain foundation | Domain (AE1) | M0 | ✅ |
 | **M2** | Hub networking + sync engine | Topology (S-A, S-B) | M1 | ⬜ |
 | **M3** | Lecturer web app + Jury OS | Both (S-C, AE2) | M2 | ⬜ |
 | **M4** | Student desktop core + Portfolio | Both (S-D, AE3) | M2 | ⬜ |
@@ -46,7 +46,7 @@ map back to the design docs (AE = system-design Phases; S = split Phases).
 - ✅ Research + revision proposal, system-design doc, two-app split doc
 - ✅ README / ROADMAP positioning
 
-## M1 — Studio domain foundation 🟡
+## M1 — Studio domain foundation ✅
 
 Single-app still; additive and non-breaking.
 
@@ -58,14 +58,15 @@ Single-app still; additive and non-breaking.
 - ✅ `studios` table + `/studios` CRUD + `StudiosScreen.tsx` on Academics tab
 - ✅ Compliance stub in Institution Settings (COA reg. no., intake) — shown for
   the `architecture` type
-- ⬜ Student admission form fields (NATA/JEE-2, programme, batch) in the UI
-- ⬜ `periods.period_type = 'studio'` long (3–4 hr) blocks in the timetable UI
-  (column already accepts it)
-- **Acceptance:** ✅ create studios, tag studio subjects with credits/head, set
-  COA reg. no. + intake — verified end-to-end against the server; an existing
+- ✅ Student admission form fields (NATA/JEE-2, programme, batch) — architecture-
+  only block on the student form's Admission tab; round-trips (incl. float score)
+- ✅ `periods.period_type = 'studio'` long (3 hr default) blocks in the Timings
+  editor — type badge cycles period→studio→break, "Add Studio" button shown for
+  the `architecture` type; counts as academic contact time
+- **Acceptance:** ✅ verified end-to-end against the server — create studios, tag
+  studio subjects with credits/head, set COA reg. no. + intake, admit a student
+  with programme/batch/NATA/JEE-2, and save a studio timetable slot; an existing
   `school` file takes the additive `ALTER`s and still opens/serves unchanged.
-  Remaining UI bits (student admission fields, studio timetable blocks) tracked
-  above.
 
 ## M2 — Hub networking + sync engine ⬜
 

@@ -16,11 +16,24 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Coffee, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Coffee, DraftingCompass, Plus, Save, Trash2 } from 'lucide-react';
 import { savePeriods } from '../api/client';
 import type { Period } from '../api/client';
 import { useTimings } from '../hooks/useTimings';
 import { useAuth } from '../stores/auth';
+import { useSchool } from '../hooks/useSchool';
+
+type SlotType = 'period' | 'break' | 'studio';
+const SLOT_META: Record<SlotType, { label: string; color: string }> = {
+  period: { label: 'Period', color: 'brand' },
+  studio: { label: 'Studio', color: 'teal' },
+  break: { label: 'Break', color: 'gray' },
+};
+// Click-through order on the type badge.
+const nextSlotType: Record<SlotType, SlotType> = { period: 'studio', studio: 'break', break: 'period' };
+function slotMeta(t: string) {
+  return SLOT_META[(t as SlotType)] ?? SLOT_META.period;
+}
 
 type EditRow = Omit<Period, 'id' | 'sort_order'> & { key: string };
 
@@ -51,7 +64,7 @@ function DayTimeline({ rows }: { rows: EditRow[] }) {
   if (total <= 0) return null;
 
   const academicMins = valid
-    .filter((r) => r.period_type === 'period')
+    .filter((r) => r.period_type === 'period' || r.period_type === 'studio')
     .reduce((s, r) => s + toMinutes(r.end_time) - toMinutes(r.start_time), 0);
 
   return (
@@ -125,7 +138,7 @@ function fromPeriod(p: Period): EditRow {
   return {
     key: nextKey(),
     label: p.label ?? '',
-    period_type: p.period_type === 'break' ? 'break' : 'period',
+    period_type: p.period_type === 'break' ? 'break' : p.period_type === 'studio' ? 'studio' : 'period',
     start_time: p.start_time ?? '08:00',
     end_time: p.end_time ?? '08:45',
   };
@@ -135,6 +148,8 @@ export function TimingsScreen() {
   const token = useAuth((s) => s.token)!;
   const qc = useQueryClient();
   const { data, isLoading } = useTimings();
+  const { data: school } = useSchool();
+  const isArchitecture = school?.type === 'architecture';
   const [rows, setRows] = useState<EditRow[]>([]);
   const [seeded, setSeeded] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -184,19 +199,15 @@ export function TimingsScreen() {
     setDirty(true);
   }
 
-  function addSlot(type: 'period' | 'break') {
+  function addSlot(type: SlotType) {
     const lastEnd = rows.length > 0 ? rows[rows.length - 1].end_time : '08:00';
-    const defaultEnd = toHHMM(toMinutes(lastEnd) + (type === 'period' ? 45 : 15));
-    const periodCount = rows.filter((r) => r.period_type === 'period').length + 1;
+    const mins = type === 'studio' ? 180 : type === 'period' ? 45 : 15; // studio = long 3h block
+    const defaultEnd = toHHMM(toMinutes(lastEnd) + mins);
+    const count = rows.filter((r) => r.period_type === type).length + 1;
+    const label = type === 'period' ? `Period ${count}` : type === 'studio' ? `Studio ${count}` : 'Break';
     setRows((prev) => [
       ...prev,
-      {
-        key: nextKey(),
-        label: type === 'period' ? `Period ${periodCount}` : 'Break',
-        period_type: type,
-        start_time: lastEnd,
-        end_time: defaultEnd,
-      },
+      { key: nextKey(), label, period_type: type, start_time: lastEnd, end_time: defaultEnd },
     ]);
     setDirty(true);
   }
@@ -260,14 +271,14 @@ export function TimingsScreen() {
                     <Table.Tr key={row.key}>
                       <Table.Td>
                         <Badge
-                          color={row.period_type === 'period' ? 'brand' : 'gray'}
-                          variant={row.period_type === 'period' ? 'filled' : 'light'}
+                          color={slotMeta(row.period_type).color}
+                          variant={row.period_type === 'break' ? 'light' : 'filled'}
                           style={{ cursor: 'pointer', userSelect: 'none' }}
                           onClick={() =>
-                            update(i, 'period_type', row.period_type === 'period' ? 'break' : 'period')
+                            update(i, 'period_type', nextSlotType[(row.period_type as SlotType) ?? 'period'])
                           }
                         >
-                          {row.period_type === 'period' ? 'Period' : 'Break'}
+                          {slotMeta(row.period_type).label}
                         </Badge>
                       </Table.Td>
                       <Table.Td>
@@ -349,6 +360,17 @@ export function TimingsScreen() {
             >
               Add Period
             </Button>
+            {isArchitecture && (
+              <Button
+                variant="subtle"
+                size="xs"
+                color="teal"
+                leftSection={<DraftingCompass size={12} />}
+                onClick={() => addSlot('studio')}
+              >
+                Add Studio
+              </Button>
+            )}
             <Button
               variant="subtle"
               size="xs"
