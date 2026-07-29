@@ -10,6 +10,15 @@ No internet. No server to maintain. No monthly subscription.
 > The original PHP/MySQL stack has been completely replaced with a native Rust + SQLite core.
 > See [§ Attribution & License](#attribution--license) below.
 
+> **🏛 Focus: Architecture education.** LEOS is being refocused as a dedicated
+> operating system for **schools & colleges of architecture** — the COA 5-year
+> B.Arch / M.Arch model built around the **design studio, juries, portfolios,
+> professional-training internships, and the design thesis**. New school files
+> default to the **School of Architecture** institution type. The full research
+> and phased plan is in
+> [`docs/architecture-education-revision.md`](docs/architecture-education-revision.md).
+> The generic school/college modes remain available during the transition.
+
 ---
 
 ## What is LEOS?

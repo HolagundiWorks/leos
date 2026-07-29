@@ -7,6 +7,25 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 
 ---
 
+## Architecture-education focus (AE) — in progress
+
+Refocusing LEOS as a dedicated school-of-architecture OS. Full research + plan:
+[`docs/architecture-education-revision.md`](docs/architecture-education-revision.md).
+
+- ✅ **Phase 0** — `architecture` institution type + studio vocabulary
+  (Programme / Studio / Subject / Year / Jury, "Studio Faculty"); default for new
+  school files; revision proposal doc
+- ⬜ **Phase 1** — subject heads + credits + `is_studio`; visiting-faculty flag;
+  NATA/JEE-2 + programme/batch on students; COA reg. no.; studio timetable blocks
+- ⬜ **Phase 2** — Jury OS (reframe Exam OS): panels with external examiners,
+  per-criterion grade + written crit, pin-up scheduling, attendance-eligibility gate
+- ⬜ **Phase 3** — Portfolio (per-student / per-studio sheets, model photos, drawings)
+- ⬜ **Phase 4** — Internship (professional training logbook + assessment) & Design Thesis
+  (milestones, pre-/final jury/viva)
+- ⬜ **Phase 5** — COA/MSAR compliance & disclosure; visiting-load ratio check
+
+---
+
 ## Foundation (P0) ✅
 
 - ✅ Rust + SQLite API server (`tiny_http`, `rusqlite`, bcrypt, bearer auth) on `:8787`

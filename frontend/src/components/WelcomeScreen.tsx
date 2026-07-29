@@ -23,6 +23,7 @@ const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 const DEFAULT_FILE = 'school.leosdb';
 
 const INSTITUTION_TYPES = [
+  { value: 'architecture', label: 'School of Architecture' },
   { value: 'school', label: 'School' },
   { value: 'pre-school', label: 'Pre-School' },
   { value: 'college', label: 'College' },
@@ -59,7 +60,7 @@ export function WelcomeScreen() {
 
   // create mode
   const [cName, setCName] = useState('');
-  const [cType, setCType] = useState('school');
+  const [cType, setCType] = useState('architecture');
   const [cPath, setCPath] = useState('');
   const [cKey, setCKey] = useState('');
   const [cKey2, setCKey2] = useState('');
