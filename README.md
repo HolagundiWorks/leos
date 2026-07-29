@@ -16,7 +16,9 @@ No internet. No server to maintain. No monthly subscription.
 > professional-training internships, and the design thesis**. New school files
 > default to the **School of Architecture** institution type. The full research
 > and phased plan is in
-> [`docs/architecture-education-revision.md`](docs/architecture-education-revision.md).
+> [`docs/architecture-education-revision.md`](docs/architecture-education-revision.md),
+> and the implementation architecture in
+> [`docs/architecture-education-system-design.md`](docs/architecture-education-system-design.md).
 > The generic school/college modes remain available during the transition.
 
 ---

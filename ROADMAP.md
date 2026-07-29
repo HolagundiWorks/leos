@@ -10,7 +10,9 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 ## Architecture-education focus (AE) — in progress
 
 Refocusing LEOS as a dedicated school-of-architecture OS. Full research + plan:
-[`docs/architecture-education-revision.md`](docs/architecture-education-revision.md).
+[`docs/architecture-education-revision.md`](docs/architecture-education-revision.md);
+implementation architecture:
+[`docs/architecture-education-system-design.md`](docs/architecture-education-system-design.md).
 
 - ✅ **Phase 0** — `architecture` institution type + studio vocabulary
   (Programme / Studio / Subject / Year / Jury, "Studio Faculty"); default for new
