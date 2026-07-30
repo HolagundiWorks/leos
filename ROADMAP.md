@@ -40,7 +40,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned
 
 - ✅ Per-period attendance marking
 - ✅ Quick Attendance kiosk UI (NFC / barcode HID scan mode)
-- ⬜ Attendance reports + export
+- ✅ Attendance reports + export (per-section summary → CSV + printable A4 PDF)
 
 ## Staff OS (P4) ✅
 
@@ -145,7 +145,7 @@ are the real remaining build targets. Tier = build priority; Gate = dependency.
 
 | Item | Priority | Gate |
 |---|---|---|
-| Attendance reports + export (PDF/Excel) | High | P3 |
+| ✅ Attendance reports + export (CSV + PDF) — **done** | High | P3 |
 | Report cards (PDF) | Medium | P5 |
 | Ranking engine | Medium | P5 |
 | LAN server/client mode | Medium | P0 |
@@ -178,4 +178,4 @@ unauthenticated by design for the local desktop gate; restrict to localhost
 before any LAN deployment.
 
 Next candidates: change-master-key UI, at-rest encryption (SQLCipher),
-attendance report export, report cards, LAN mode.
+report cards (PDF), ranking engine, LAN mode.

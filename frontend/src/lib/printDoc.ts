@@ -168,6 +168,86 @@ export function receiptHtml(
   </body></html>`;
 }
 
+export interface AttendanceReportRow {
+  name: string;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+  total: number;
+  pct: number;
+}
+
+/** A4 attendance report for one section over a date range (printable → PDF). */
+export function attendanceReportHtml(
+  s: Letterhead,
+  meta: { section: string; from: string; to: string; academicYear?: string | null },
+  rows: AttendanceReportRow[],
+): string {
+  const withData = rows.filter((r) => r.total > 0);
+  const avg = withData.length
+    ? Math.round((withData.reduce((a, r) => a + r.pct, 0) / withData.length) * 10) / 10
+    : 0;
+  const below = withData.filter((r) => r.pct < 75).length;
+  const body = rows.length
+    ? rows
+        .map((r, i) => {
+          const marked = r.total > 0;
+          const low = marked && r.pct < 75;
+          const pct = marked ? `${r.pct}%` : '—';
+          return `<tr${low ? ' class="low"' : ''}><td class="c">${i + 1}</td><td>${esc(r.name) || '—'}</td>` +
+            `<td class="c">${r.present}</td><td class="c">${r.absent}</td><td class="c">${r.late}</td>` +
+            `<td class="c">${r.excused}</td><td class="c">${r.total}</td><td class="c pct">${pct}</td></tr>`;
+        })
+        .join('')
+    : `<tr><td colspan="8" style="text-align:center;color:#888">No attendance records for this period.</td></tr>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Attendance Report — ${esc(meta.section)}</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; font-size: 12px; }
+    .head { display:flex; align-items:center; gap:14px; border-bottom:3px solid #11365f; padding-bottom:10px; }
+    .head img { height:54px; }
+    .head h1 { margin:0; font-size:20px; color:#11365f; }
+    .head .sub { color:#555; font-size:12px; }
+    .title { font-size:14px; color:#11365f; margin:16px 0 4px; text-transform:uppercase; letter-spacing:.3px; font-weight:700; }
+    .meta { color:#555; font-size:11.5px; margin-bottom:8px; }
+    .meta b { color:#1a1a1a; }
+    table { width:100%; border-collapse:collapse; margin-top:4px; }
+    td, th { border:1px solid #ccc; padding:5px 8px; text-align:left; }
+    th { background:#f0f3f7; font-size:11px; }
+    td.c, th.c { text-align:center; }
+    td.pct { font-weight:600; }
+    tr.low td { background:#fbecec; }
+    tr.low td.pct { color:#b02020; }
+    .stats { display:flex; gap:22px; margin-top:12px; font-size:12px; }
+    .stats .n { font-size:18px; font-weight:700; color:#11365f; }
+    .note { color:#888; font-size:10px; margin-top:14px; }
+    .foot { margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end; font-size:11px; color:#555; }
+    .sigline { text-align:center; }
+    .sigline .line { border-top:1px solid #333; padding-top:4px; min-width:180px; margin-top:34px; }
+  </style></head><body>
+    <div class="head">${s.logo ? `<img src="${s.logo}" alt="logo"/>` : ''}
+      <div><h1>${esc(s.name)}</h1>${s.address ? `<div class="sub">${esc(s.address)}</div>` : ''}</div>
+    </div>
+    <div class="title">Attendance Report</div>
+    <div class="meta"><b>Section:</b> ${esc(meta.section)} &nbsp;·&nbsp; <b>Period:</b> ${esc(meta.from)} to ${esc(meta.to)}${meta.academicYear ? ` &nbsp;·&nbsp; <b>Academic Year:</b> ${esc(meta.academicYear)}` : ''}</div>
+    <table>
+      <tr><th class="c">#</th><th>Student</th><th class="c">Present</th><th class="c">Absent</th><th class="c">Late</th><th class="c">Excused</th><th class="c">Marked</th><th class="c">%</th></tr>
+      ${body}
+    </table>
+    <div class="stats">
+      <div><div class="n">${rows.length}</div>Students</div>
+      <div><div class="n">${avg}%</div>Class average</div>
+      <div><div class="n">${below}</div>Below 75%</div>
+    </div>
+    <div class="note">Attendance % counts present and late sessions as attended. Generated from the LEOS school database; figures are live as of generation.</div>
+    <div class="foot">
+      <span>Generated ${esc(new Date().toISOString().slice(0, 10))}</span>
+      <div class="sigline">${s.signature ? `<img src="${s.signature}" style="height:40px;display:block;margin:0 auto 2px" alt="signature"/>` : ''}<div class="line">${esc(s.principalName || 'Class Teacher / Principal')}</div></div>
+    </div>
+  </body></html>`;
+}
+
 /** Landscape, bordered certificate. */
 export function certificateHtml(
   s: Letterhead,

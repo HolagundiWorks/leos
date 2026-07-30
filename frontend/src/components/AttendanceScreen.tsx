@@ -15,9 +15,11 @@ import {
   Title,
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Download, Monitor, Sun, Sunset } from 'lucide-react';
+import { Check, Download, Monitor, Printer, Sun, Sunset } from 'lucide-react';
 import { useClasses } from '../hooks/useClasses';
+import { useSchool } from '../hooks/useSchool';
 import { useAuth } from '../stores/auth';
+import { attendanceReportHtml, printHtml, type AttendanceReportRow } from '../lib/printDoc';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 
@@ -219,13 +221,23 @@ function MarkAttendancePanel({ token, sectionId }: { token: string; sectionId: n
   );
 }
 
+// Quote a CSV cell only when it contains a comma, quote, or newline.
+const csvCell = (v: string | number) => {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const rowName = (r: { first_name: string | null; last_name: string | null }) =>
+  [r.first_name, r.last_name].filter(Boolean).join(' ');
+const safeFile = (s: string) => s.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'section';
+
 // ─── Monthly summary panel ─────────────────────────────────────────────────────
-function SummaryPanel({ token, sectionId }: { token: string; sectionId: number }) {
+function SummaryPanel({ token, sectionId, sectionLabel }: { token: string; sectionId: number; sectionLabel: string }) {
   const today = new Date();
   const defaultFrom = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
   const defaultTo = today.toISOString().slice(0, 10);
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
+  const { data: school } = useSchool();
 
   const { data, isLoading } = useQuery({
     queryKey: ['attendance-summary', sectionId, from, to],
@@ -235,14 +247,61 @@ function SummaryPanel({ token, sectionId }: { token: string; sectionId: number }
   });
 
   const rows = data?.summary ?? [];
+  const hasRows = rows.length > 0;
+
+  const exportCsv = () => {
+    const header = ['Student', 'Present', 'Absent', 'Late', 'Excused', 'Total Marked', 'Attendance %'];
+    const lines = [header.join(',')];
+    for (const r of rows) {
+      lines.push(
+        [rowName(r), r.present_days, r.absent_days, r.late_days, r.excused_days, r.total_marked, r.attendance_pct]
+          .map(csvCell)
+          .join(','),
+      );
+    }
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `attendance_${safeFile(sectionLabel)}_${from}_to_${to}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const printReport = () => {
+    const reportRows: AttendanceReportRow[] = rows.map((r) => ({
+      name: rowName(r),
+      present: r.present_days,
+      absent: r.absent_days,
+      late: r.late_days,
+      excused: r.excused_days,
+      total: r.total_marked,
+      pct: r.attendance_pct,
+    }));
+    printHtml(
+      attendanceReportHtml(
+        {
+          name: school?.name ?? 'School',
+          address: school?.address,
+          principalName: school?.principal_name,
+          logo: school?.logo,
+          signature: school?.signature,
+        },
+        { section: sectionLabel, from, to, academicYear: school?.academic_year },
+        reportRows,
+      ),
+    );
+  };
 
   return (
     <Stack gap="md">
       <Group gap="sm" align="flex-end">
         <TextInput type="date" label="From" value={from} onChange={(e) => setFrom(e.currentTarget.value)} w={150} />
         <TextInput type="date" label="To" value={to} onChange={(e) => setTo(e.currentTarget.value)} w={150} />
-        <Button size="sm" variant="default" leftSection={<Download size={13} />} disabled>
+        <Button size="sm" variant="default" leftSection={<Download size={13} />} onClick={exportCsv} disabled={!hasRows} data-testid="attendance-export-csv">
           Export CSV
+        </Button>
+        <Button size="sm" variant="default" leftSection={<Printer size={13} />} onClick={printReport} disabled={!hasRows} data-testid="attendance-print">
+          Print / PDF
         </Button>
       </Group>
       {isLoading ? (
@@ -305,6 +364,7 @@ export function AttendanceScreen({ onKiosk }: { onKiosk?: () => void } = {}) {
   }, [classesData]);
 
   const sectionOptions = flatSections.map((s) => ({ value: String(s.id), label: s.label }));
+  const sectionLabel = flatSections.find((s) => String(s.id) === sectionId)?.label ?? '';
 
   return (
     <Container size="xl" px={0}>
@@ -350,7 +410,7 @@ export function AttendanceScreen({ onKiosk }: { onKiosk?: () => void } = {}) {
             </Card>
           ) : (
             <Card>
-              <SummaryPanel token={token} sectionId={Number(sectionId)} />
+              <SummaryPanel token={token} sectionId={Number(sectionId)} sectionLabel={sectionLabel} />
             </Card>
           )
         ) : (
