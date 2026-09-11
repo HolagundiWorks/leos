@@ -1,5 +1,5 @@
 // Open a print window with the given full HTML document and trigger print.
-// Works in the Tauri WebView2 (and a browser): the native print dialog lets the
+// Works in Electron (and a browser): the native print dialog lets the
 // user save as PDF or print to paper. Mirrors the pattern in IdCardScreen/FeeScreen.
 export function printHtml(html: string) {
   const w = window.open('', '_blank', 'width=900,height=720');

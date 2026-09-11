@@ -1,0 +1,25 @@
+<resources>
+    <!-- Carbon G100 dark theme with accessible lighter interactive tokens. -->
+    <color name="brand_primary">#78A9FF</color>
+    <color name="brand_on_primary">#001141</color>
+    <color name="brand_primary_container">#0043CE</color>
+    <color name="brand_on_primary_container">#EDF5FF</color>
+    <color name="brand_secondary">#BE95FF</color>
+    <color name="brand_on_secondary">#1C0F30</color>
+    <color name="brand_secondary_container">#6929C4</color>
+    <color name="brand_on_secondary_container">#F6F2FF</color>
+    <color name="brand_tertiary">#33B1FF</color>
+    <color name="brand_tertiary_container">#00539A</color>
+    <color name="brand_surface">#161616</color>
+    <color name="brand_surface_container">#262626</color>
+    <color name="brand_on_surface">#F4F4F4</color>
+    <color name="brand_on_surface_variant">#C6C6C6</color>
+    <color name="brand_surface_variant">#393939</color>
+    <color name="brand_surface_lowest">#161616</color>
+    <color name="brand_surface_low">#1F1F1F</color>
+    <color name="brand_surface_high">#393939</color>
+    <color name="brand_surface_highest">#525252</color>
+    <color name="brand_outline">#8D8D8D</color>
+    <color name="brand_error">#FF8389</color>
+    <color name="brand_icon_background">#161616</color>
+</resources>

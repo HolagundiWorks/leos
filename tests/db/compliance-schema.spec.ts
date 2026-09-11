@@ -1,5 +1,5 @@
 import { describe, it, expect, inject, beforeAll, afterAll } from 'vitest';
-import type Database from 'better-sqlite3';
+import type Database from '../../desktop/src/sqlite';
 import { openDb, tableNames } from '../helpers/db';
 
 // The compliance / SIS expansion adds many tables + columns. Assert the migration

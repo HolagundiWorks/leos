@@ -4,10 +4,17 @@
 
 **Open source** · Offline-first, desktop-first school operating system built by [Holagundi Consulting Works](https://github.com/HolagundiWorks).
 A calm "school ops cockpit" — not another ERP dashboard. All data lives in a single portable file.
+
+Brand assets, colour tokens, logo rules, typography, voice, accessibility, and
+print guidance are defined in [`docs/BRAND.md`](docs/BRAND.md).
+
+A populated fictional school archive for demonstrations can be regenerated with
+`npm run demo:create --prefix desktop`; credentials and contents are documented
+in [`demo/README.md`](demo/README.md).
 No internet. No server to maintain. No monthly subscription.
 
 > **Derived from openSIS Classic Community Edition** (GPL v2) by [OS4ED](https://www.os4ed.com/).
-> The original PHP/MySQL stack has been completely replaced with a native Rust + SQLite core.
+> The original PHP/MySQL stack has been replaced with an offline SQLite core.
 > See [§ Attribution & License](#attribution--license) below.
 
 ---
@@ -24,15 +31,15 @@ LEOS takes that domain knowledge and rebuilds it as a self-contained desktop app
 | **Offline** | No — server must be reachable | Yes — fully offline, no internet required |
 | **Navigation** | Sidebar menu | MS Office two-level tab ribbon, role-aware |
 | **Dashboard** | Static summary counts | Active work queue — "what needs attention today" |
-| **User roles** | Admin / Teacher / Parent | L1 Principal → L5 Parent, each with a personal dashboard |
+| **User roles** | Admin / Teacher / Parent | Principal, teacher, parent, and student accounts with scoped dashboards |
+| **Learning** | Separate LMS normally required | Built-in lessons, resources, assignments, submissions, grading, and feedback |
 | **Timetable** | Basic schedule entry | Conflict detection, teacher load tracking, substitution engine |
 | **Floor plan** | None | Canvas-based classroom floor-plan editor |
 | **Hardware** | None | NFC / barcode HID scan for attendance kiosk |
-| **Design tools** | None | Canva integration module (encrypted token) |
 | **External data** | Manual entry only | CSV + SQLite one-time import connector |
 | **Backup** | Database dump | `.leosdb` ZIP archive (manifest + SQLite + media + checksum) |
 | **Audit** | None | Security audit log with write-event trail |
-| **LAN multi-user** | Web server serves all clients | ⬜ planned — other PCs will point at this machine's IP:8787 |
+| **LAN multi-user** | Web server serves all clients | 🟡 paired desktop and browser access on trusted private networks; TLS hardening remains |
 | **Module admin** | Static | Tech Admin panel — enable/disable modules per access level |
 | **Institution type** | School-only terminology | Generic: School / Pre-School / College / PUC — terms adapt |
 
@@ -42,13 +49,20 @@ LEOS takes that domain knowledge and rebuilds it as a self-contained desktop app
 
 | Layer | Technology |
 |---|---|
-| Desktop shell | **Tauri v2** — single self-contained `.exe`, WebView2 |
+| Desktop shell | **Electron** — migration target and active desktop runtime |
+| Android client | Native **Java/Android** UI using the paired LAN API |
 | UI | **React 18 + TypeScript + Vite**, **Mantine v7**, **Lucide** icons |
 | Client state | **Zustand** (auth + selection) + **TanStack Query v5** (server state) |
-| API server | **Rust** (`tiny_http` + `rusqlite` + `bcrypt` + `uuid`) — supervised `leos-server` sidecar |
-| Database | **SQLite** via `rusqlite` |
+| Application services | **TypeScript** in the Electron main process with Zod-validated IPC |
+| Database | **SQLite** via Node's built-in `node:sqlite` engine |
 | Portable data file | **`.leosdb`** — ZIP: `manifest.json` + `school.sqlite` + `media/` + `documents/` + checksum |
 | Auth | bcrypt password hash + bearer token |
+| Optional cloud API | Supabase REST via native `fetch` (no additional SDK/runtime) |
+
+The verified cutover is complete: the former Tauri/Rust implementation and the
+duplicate timetable application have been removed. All product work, including
+the LMS, now uses the TypeScript/Electron path. Git history preserves the
+migration record.
 
 ---
 
@@ -56,23 +70,33 @@ LEOS takes that domain knowledge and rebuilds it as a self-contained desktop app
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  LEOS.exe  (Tauri v2 desktop window)                 │
+│  LEOS.exe  (Electron desktop window)                 │
 │                                                      │
 │   React / Mantine cockpit UI                         │
-│        │  fetch http://localhost:8787                │
+│        │  validated, typed IPC                       │
 │        ▼                                             │
-│   leos-server  (supervised child process / sidecar)  │
+│   TypeScript application services (Electron main)    │
 │        │                                             │
 │        ▼                                             │
 │   SQLite  (school.sqlite)                            │
 │        ▲                                             │
 │        └── open / save ──►  school.leosdb            │  ← portable, Tally-style
 └──────────────────────────────────────────────────────┘
-        (LAN mode: planned — other machines point at IP:8787)
+        (optional paired LAN host/client transport)
 ```
 
-- UI never talks to SQLite directly — it calls the Rust API.
-- The Rust server runs as a **supervised sidecar** in production (see [`docs/server-control.md`](docs/server-control.md)) or **standalone** during development.
+- The sandboxed UI never talks to SQLite directly; the narrow preload bridge
+  sends validated requests to TypeScript services in the Electron main process.
+- LAN mode serves the same React application and API from the host. Other
+  devices can open the displayed `http://<host-ip>:8788` address in a browser,
+  enter the temporary pairing code, and sign in with their LEOS account. This
+  does not add a second application server or database implementation.
+- L1 administrators can configure and test an optional Supabase project from
+  Tech Admin. SQLite remains authoritative and all core workflows stay offline.
+- The Android client under `android-client/` has native connection, login,
+  dashboard, list, attendance, planning, LMS, task, and reminder screens. Its
+  server permissions are limited to day-to-day work; configuration and
+  administration remain on the host desktop.
 - A school's entire dataset lives in one `.leosdb` file — copy, move, or back it up like any file.
 
 ---
@@ -98,38 +122,34 @@ LEOS takes that domain knowledge and rebuilds it as a self-contained desktop app
 | Backup & Recovery | ✅ | `.leosdb` save/open, integrity check |
 | Security & Audit | ✅ | Write-event audit trail |
 | External DB Connector | ✅ | CSV + SQLite one-time import |
-| Hardware Integration | ✅ | NFC / barcode HID scan, card enrollment |
-| Design Connect | ✅ | Canva integration, encrypted token storage |
+| Hardware Integration | 🟡 | NFC/barcode keyboard-wedge scan + card enrollment; native biometric integration is planned |
 | Tech Admin | ✅ | System health, module enable/disable, L1–L5 hierarchy editor |
 | Institution Settings | ✅ | Type (School/College/etc.), logo, academic config |
-| Payroll | 🟡 | Structure stub — hooks in place |
+| Payroll | ✅ | Salary structures, monthly generation, payslip history + print |
 
 ---
 
 ## Running (development)
 
-**Prerequisites:** Node.js 18+, Rust stable-msvc + MSVC build tools, WebView2 (pre-installed on Win 10/11).
+**Prerequisite:** Node.js 24 or newer. No Rust, Python, Visual Studio, native
+SQLite add-on, or separately managed server is required for the active stack.
 
 ```bash
-# 1. Start the Rust API server (creates + seeds school.sqlite, listens on :8787)
-cargo run --manifest-path server/Cargo.toml
-
-# 2. Start the Vite dev server (:5174)
-cd frontend && npm install && npm run dev
-
-# 3. Optional: open the native desktop window (embeds the server)
-cargo tauri dev
+npm run desktop:install
+npm run ui:dev
+# In a second terminal:
+npm run desktop:dev
 ```
 
-Open `http://localhost:5174`. **Login: `admin` / `ChangeMe@3201`.**
+Create or open a school file, then sign in with that school's administrator
+credentials.
 
 For full architecture detail see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ### Production build
 
 ```bash
-cd frontend && npm run build
-cargo tauri build   # → src-tauri/target/release/bundle/ (MSI + NSIS)
+npm run desktop:package
 ```
 
 ---
@@ -153,24 +173,17 @@ Keyboard shortcuts: `Ctrl-K` command palette, `Alt-1…8` tab shortcuts.
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Runtime model, navigation, module map |
 | [`ROADMAP.md`](ROADMAP.md) | Feature completion tracker |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production build and release checklist |
-| [`docs/server-control.md`](docs/server-control.md) | Service Manager and sidecar architecture |
+| [`docs/BRAND.md`](docs/BRAND.md) | Carbon colour tokens, logo, themes, and accessibility rules |
+| [`demo/README.md`](demo/README.md) | Fictional demo school generator and credentials |
 | [`test-plan.md`](test-plan.md) | Automated test strategy |
 | [`tests/README.md`](tests/README.md) | How to run the test suite |
-| [`timetable-app/README.md`](timetable-app/README.md) | Standalone open-source timetable desktop app |
-
----
-
-## Related projects
-
-**[Timetable Manager](timetable-app/)** — a standalone Electron desktop app that implements LEOS scheduling logic (periods, conflicts, quotas, teacher load) without the full cockpit. Open source under GPL v2.
-
 ---
 
 ## Security notes
 
 - Repo is **public**. Never commit `*.sqlite`, `*.leosdb`, or any file containing credentials.
-- Canva API tokens are stored encrypted — never committed in plain text.
-- The `admin`/`ChangeMe@3201` seed credential is for development only. Change it before deployment.
+- New schools require user-selected master and administrator passwords. Fixed
+  credentials exist only inside isolated automated test fixtures.
 
 ---
 
@@ -185,7 +198,7 @@ LEOS is a derivative work of **openSIS Classic Community Edition**, copyright
 - Database schema concepts and academic-year / grading terminology
 
 **What was replaced entirely:**
-- Backend: PHP + MySQL → Rust + SQLite (embedded, no installation required)
+- Backend: PHP + MySQL → TypeScript + built-in SQLite (embedded, no installation required)
 - Frontend: server-rendered PHP templates → React 18 + TypeScript + Mantine v7
 - Deployment: web server required → self-contained desktop `.exe`
 - Data portability: database dump → single `.leosdb` portable archive

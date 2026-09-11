@@ -1,100 +1,89 @@
-// Launch an isolated LEOS API server for tests.
-//
-// Isolation strategy (no production data is ever touched):
-//   * LEOS_DATA_DIR  -> a throwaway temp folder; the server creates its
-//                       school.sqlite + school.leosdb there on first run.
-//   * LEOS_PORT      -> a dedicated test port, so a running dev server (8787)
-//                       does not clash.
-// Both overrides were added to server/src/lib.rs specifically for testability.
-import { spawn, type ChildProcess } from 'node:child_process';
+// Isolated HTTP adapter around the TypeScript router used by Electron.
+import { createServer, type Server } from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { REPO_ROOT } from './env';
+import { hash } from 'bcryptjs';
+import * as SQLiteModule from '../../desktop/src/sqlite';
+import { migrateSchema } from '../../desktop/src/schema';
+import { AuthService } from '../../desktop/src/auth';
+import { ApiRouter } from '../../desktop/src/api-router';
+import { ADMIN_PASS, ADMIN_USER, MASTER_KEY } from './env';
 
-export interface TestServer {
-  baseUrl: string;
-  dataDir: string;
-  /** Absolute path to the live SQLite file — used by DB tests for assertions. */
-  dbPath: string;
-  stop: () => Promise<void>;
+// Playwright and Vitest transpile global setup through different CJS/ESM
+// interop paths, so unwrap either shape explicitly.
+const Database = ((SQLiteModule as any).default?.default ?? (SQLiteModule as any).default) as typeof import('../../desktop/src/sqlite').default;
+
+export interface TestServer { baseUrl: string; dataDir: string; dbPath: string; stop: () => Promise<void> }
+
+async function seed(dbPath: string): Promise<void> {
+  const db = new Database(dbPath);
+  try {
+    migrateSchema(db);
+    const adminHash = await hash(ADMIN_PASS, 4);
+    const masterHash = await hash(MASTER_KEY, 4);
+    db.transaction(() => {
+      db.prepare('INSERT INTO schools(name,academic_year,type) VALUES(?,?,?)').run('LEOS Test School', '2026-27', 'school');
+      db.prepare('INSERT INTO users(username,password_hash,role,name,level) VALUES(?,?,?,?,1)').run(ADMIN_USER, adminHash, 'admin', 'Administrator');
+      db.prepare("INSERT INTO meta(key,value) VALUES('master_key_hash',?)").run(masterHash);
+      db.prepare("INSERT INTO students(first_name,last_name,email,enrolled,gender,category,birthdate) VALUES('Asha','Demo','asha@example.test',1,'Female','General','2015-04-10')").run();
+      db.prepare("INSERT INTO staff(first_name,last_name,email,profile,title) VALUES('Dev','Teacher','teacher@example.test','teacher','Teacher')").run();
+      db.prepare("INSERT INTO courses(name) VALUES('Primary')").run();
+      db.prepare("INSERT INTO subjects(course_id,name,code,weekly_periods) VALUES(1,'Mathematics','MATH',5)").run();
+      db.prepare("INSERT INTO classes(name,grade_level,course_id) VALUES('Grade 1','1',1)").run();
+      db.prepare("INSERT INTO classrooms(name,code,capacity) VALUES('Room 1','R1',40)").run();
+      db.prepare("INSERT INTO sections(class_id,name,teacher_id,capacity,room_id) VALUES(1,'A',1,40,1)").run();
+      db.prepare("INSERT INTO section_students(section_id,student_id) VALUES(1,1)").run();
+    })();
+  } finally { db.close(); }
 }
 
-function serverBinary(): string {
-  const exe = process.platform === 'win32' ? 'leos-server.exe' : 'leos-server';
-  const candidates = ['release', 'debug'].map((p) =>
-    path.join(REPO_ROOT, 'server', 'target', p, exe),
-  );
-  // Pick whichever exists and is newmost-recently built, so a fresh
-  // `cargo build` is always used even if a stale release/debug binary lingers.
-  const found = candidates
-    .filter((p) => fs.existsSync(p))
-    .map((p) => ({ p, mtime: fs.statSync(p).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime);
-  if (found.length > 0) return found[0].p;
-  throw new Error(
-    `leos-server binary not found.\nBuild it first:\n  cd server && cargo build\n(looked for ${candidates.join(' and ')})`,
-  );
+function readBody(request: import('node:http').IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    request.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 10 * 1024 * 1024) { reject(new Error('Request body is too large')); request.destroy(); }
+      else chunks.push(chunk);
+    });
+    request.on('end', () => {
+      if (!chunks.length) return resolve(undefined);
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch { reject(new Error('Invalid JSON body')); }
+    });
+    request.on('error', reject);
+  });
 }
 
-async function waitForHealth(baseUrl: string, timeoutMs = 30_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastErr: unknown;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${baseUrl}/health`);
-      if (res.ok) return;
-    } catch (e) {
-      lastErr = e;
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`Server at ${baseUrl} never became healthy: ${String(lastErr)}`);
-}
-
-/** Start a fresh, isolated server on `port` with its own temp data directory. */
 export async function startTestServer(port: number): Promise<TestServer> {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `leos-test-${port}-`));
-  const baseUrl = `http://localhost:${port}`;
-
-  const child: ChildProcess = spawn(serverBinary(), [], {
-    cwd: dataDir,
-    env: {
-      ...process.env,
-      LEOS_DATA_DIR: dataDir,
-      LEOS_PORT: String(port),
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  const logs: string[] = [];
-  child.stdout?.on('data', (d) => logs.push(String(d)));
-  child.stderr?.on('data', (d) => logs.push(String(d)));
-  child.on('exit', (code) => {
-    if (code && code !== 0) {
-      // eslint-disable-next-line no-console
-      console.error(`leos-server (test) exited ${code}:\n${logs.join('')}`);
+  const dbPath = path.join(dataDir, 'school.sqlite');
+  await seed(dbPath);
+  const auth = new AuthService(() => dbPath);
+  auth.acceptVerifiedSchool();
+  const router = new ApiRouter(() => dbPath, auth);
+  const server: Server = createServer(async (request, response) => {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    if (request.method === 'OPTIONS') { response.writeHead(204).end(); return; }
+    try {
+      const token = request.headers.authorization?.replace(/^Bearer\s+/i, '') ?? null;
+      const result = await router.handle({
+        method: (request.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+        path: request.url ?? '/', token, body: await readBody(request),
+      });
+      response.writeHead(result.status, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify(result.body));
+    } catch (error) {
+      response.writeHead(500, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
     }
   });
-
-  try {
-    await waitForHealth(baseUrl);
-  } catch (e) {
-    child.kill();
-    throw new Error(`${e instanceof Error ? e.message : e}\n--- server output ---\n${logs.join('')}`);
-  }
-
-  const stop = () =>
-    new Promise<void>((resolve) => {
-      if (child.exitCode !== null || child.killed) return resolve();
-      child.once('exit', () => resolve());
-      child.kill();
-      // Hard-stop fallback so a hung process can't wedge the suite.
-      setTimeout(() => {
-        if (child.exitCode === null) child.kill('SIGKILL');
-        resolve();
-      }, 3_000);
-    });
-
-  return { baseUrl, dataDir, dbPath: path.join(dataDir, 'school.sqlite'), stop };
+  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
+  return {
+    baseUrl: `http://127.0.0.1:${port}`, dataDir, dbPath,
+    stop: () => new Promise<void>((resolve) => server.close(() => { fs.rmSync(dataDir, { recursive: true, force: true }); resolve(); })),
+  };
 }

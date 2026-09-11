@@ -43,4 +43,15 @@ describe('API · auth', () => {
     expect(res.status).toBe(200);
     expect(res.body.user.username).toBe(ADMIN_USER);
   });
+
+  it('revokes the server session on logout', async () => {
+    const client = api(baseUrl);
+    await client.login();
+
+    const logout = await client.post('/auth/logout');
+    expect(logout.status).toBe(200);
+
+    const after = await client.get('/auth/me');
+    expect(after.status).toBe(401);
+  });
 });

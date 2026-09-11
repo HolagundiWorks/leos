@@ -21,8 +21,8 @@ import { useAuth } from '../stores/auth';
 import { initials } from '../types';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
-const TEAL = '#3E7B7B';
-const GRAPHITE = '#1E2329';
+const TEAL = '#0F62FE';
+const GRAPHITE = '#161616';
 
 interface RosterStudent {
   id: number;

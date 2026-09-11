@@ -52,7 +52,7 @@
 /* Active tab: lifts into the ribbon with a frosted white card */
 .tabBtn[data-active='true'] {
   background: rgba(255, 255, 255, 0.88);
-  color: #1E2329;
+  color: #161616;
   font-weight: 600;
 }
 /* Teal accent underline on active tab */
@@ -63,7 +63,7 @@
   left: 12px;
   right: 12px;
   height: 2px;
-  background: #3E7B7B;
+  background: #0F62FE;
   border-radius: 1px 1px 0 0;
 }
 
@@ -166,7 +166,7 @@
 
 .actionBtn:hover:not([disabled]) {
   background: rgba(62, 123, 123, 0.12);
-  color: #3E7B7B;
+  color: #0F62FE;
 }
 
 /* Highlighted when this is the currently open module */
@@ -181,15 +181,8 @@
   left: 10px;
   right: 10px;
   height: 2px;
-  background: #3E7B7B;
+  background: #0F62FE;
   border-radius: 1px;
-}
-
-/* Placeholder (coming soon) — greyed, no cursor */
-.actionBtn[data-placeholder='true'] {
-  opacity: 0.35;
-  cursor: default;
-  pointer-events: none;
 }
 
 .actionBtn:focus-visible {

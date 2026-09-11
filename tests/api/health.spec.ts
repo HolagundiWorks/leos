@@ -9,7 +9,7 @@ describe('API · health', () => {
     const res = await client.get<{ ok: boolean; service: string }>('/health');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.service).toBe('leos-server');
+    expect(res.body.service).toBe('leos-typescript');
   });
 
   it('GET / also answers as a health check', async () => {

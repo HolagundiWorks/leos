@@ -8,13 +8,13 @@ import {
   Stack,
   Text,
   TextInput,
-  ThemeIcon,
   Title,
 } from '@mantine/core';
-import { CircleAlert, Layers } from 'lucide-react';
+import { CircleAlert } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { useAuth } from '../stores/auth';
 import { BrandWatermark } from './brand/BrandWatermark';
+import { BrandMark } from './brand/BrandMark';
 
 export function LoginPage() {
   const signIn = useAuth((s) => s.signIn);
@@ -34,11 +34,7 @@ export function LoginPage() {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        // Not an API error (e.g. fetch failed) → the backend is down/hung.
-        // Point the user at the always-available server controls (footer).
-        setError(
-          "Can't reach the server. Use the server controls at the bottom-left to Restart it, then sign in again.",
-        );
+        setError("Can't reach the LEOS service. Close and reopen the desktop app, then try again.");
       }
     } finally {
       setLoading(false);
@@ -46,14 +42,12 @@ export function LoginPage() {
   };
 
   return (
-    <Center mih="100vh" p="md" style={{ background: 'var(--mantine-color-gray-0)' }}>
+    <Center mih="100vh" p="md" style={{ background: 'var(--mantine-color-body)' }}>
       <BrandWatermark bottom={20} />
       <Card w={380} withBorder shadow="sm" radius="lg" p="xl">
         <Stack gap="lg">
           <Stack gap={6} align="center">
-            <ThemeIcon size={52} radius="lg" variant="light" color="brand">
-              <Layers size={26} strokeWidth={1.6} />
-            </ThemeIcon>
+            <BrandMark size={64} />
             <Title order={3} ta="center" c="gray.9">
               LEOS
             </Title>
@@ -94,7 +88,7 @@ export function LoginPage() {
 
           <Stack gap={4} align="center">
             <Text size="xs" c="dimmed" ta="center">
-              Default sign-in: <Text span fw={600}>admin</Text> / <Text span fw={600}>ChangeMe@3201</Text>
+              Sign in with the account issued by your school administrator.
             </Text>
             <Text
               size="xs"

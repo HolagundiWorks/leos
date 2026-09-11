@@ -7,6 +7,10 @@
 # LEOS React/Mantine UI — deps and build artifacts (run `npm run build`).
 /frontend/node_modules/
 /frontend/dist/
+/desktop/node_modules/
+/desktop/dist/
+/desktop/release*/
+/desktop/.package-smoke-data/
 
 # Timetable Manager sub-app (Electron + Vite + Express).
 /timetable-app/node_modules/

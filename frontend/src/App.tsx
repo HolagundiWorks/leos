@@ -1,13 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { Center, Container, Loader } from '@mantine/core';
 import type { SessionUser } from './types';
 import { useAuth } from './stores/auth';
 import { useSelection } from './stores/selection';
-import { BackgroundLayer } from './components/BackgroundLayer';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { LoginPage } from './components/LoginPage';
 import { CockpitShell } from './components/cockpit/CockpitShell';
-import { StudentsScreen } from './components/StudentsScreen';
-import { StudentProfileScreen } from './components/StudentProfileScreen';
 import { StaffScreen } from './components/StaffScreen';
 import { CoursesScreen } from './components/CoursesScreen';
 import { SubjectsScreen } from './components/SubjectsScreen';
@@ -15,38 +13,20 @@ import { ClassroomsScreen } from './components/ClassroomsScreen';
 import { ClassesScreen } from './components/ClassesScreen';
 import { TeacherSubjectsScreen } from './components/TeacherSubjectsScreen';
 import { TimingsScreen } from './components/TimingsScreen';
-import { TimetableScreen } from './components/TimetableScreen';
-import { FloorPlanScreen } from './components/FloorPlanScreen';
 import { InstitutionSettingsScreen } from './components/InstitutionSettingsScreen';
 import { AcademicYearScreen } from './components/AcademicYearScreen';
 import { SubstitutionScreen } from './components/SubstitutionScreen';
-import { AttendanceScreen } from './components/AttendanceScreen';
 import { AttendanceKiosk } from './components/AttendanceKiosk';
-import { StaffOSScreen } from './components/StaffOSScreen';
-import { PayrollScreen } from './components/PayrollScreen';
-import { ExamScreen } from './components/ExamScreen';
-import { FeeScreen } from './components/FeeScreen';
-import { EventScreen } from './components/EventScreen';
 import { RemindersScreen } from './components/RemindersScreen';
 import { IdCardScreen } from './components/IdCardScreen';
-import { TransportScreen } from './components/TransportScreen';
 import { IssuedItemsScreen } from './components/IssuedItemsScreen';
 import { VisitorScreen } from './components/VisitorScreen';
-import { LibraryScreen } from './components/LibraryScreen';
 import { FinanceReportScreen } from './components/FinanceReportScreen';
 import { ScholarshipScreen } from './components/ScholarshipScreen';
 import { ScheduleViewScreen } from './components/ScheduleViewScreen';
 import { ActivityScreen } from './components/ActivityScreen';
-import { BackupScreen } from './components/BackupScreen';
 import { SecurityScreen } from './components/SecurityScreen';
-import { ImportScreen } from './components/ImportScreen';
-import { HardwareScreen } from './components/HardwareScreen';
-import { DesignScreen } from './components/DesignScreen';
 import { TechAdminScreen } from './components/TechAdminScreen';
-import { ServerControlScreen } from './components/ServerControlScreen';
-import { ServerControlFooter } from './components/ServerControlFooter';
-import { LetterScreen } from './components/LetterScreen';
-import { CertificateScreen } from './components/CertificateScreen';
 import { SportsScreen } from './components/SportsScreen';
 import { ClubsScreen } from './components/ClubsScreen';
 import { ReceiptsScreen } from './components/ReceiptsScreen';
@@ -57,7 +37,74 @@ import { ExamArchiveScreen } from './components/ExamArchiveScreen';
 import { PublicDisclosureScreen } from './components/PublicDisclosureScreen';
 import { PracticalExamScreen } from './components/PracticalExamScreen';
 import { RoleDashboard } from './components/RoleDashboard';
-import { Placeholder } from './components/Placeholder';
+import { FacultyPlannerScreen } from './components/FacultyPlannerScreen';
+import { PortalAccountsScreen } from './components/PortalAccountsScreen';
+import { PortalProfileScreen } from './components/PortalProfileScreen';
+import { LanConnectionManager } from './components/LanConnectionManager';
+import { moduleAvailable } from './clientMode';
+
+// Keep the large PDF/canvas/QR toolchains out of the startup bundle. These
+// screens are fetched only when their ribbon action is opened.
+const FloorPlanScreen = lazy(() =>
+  import('./components/FloorPlanScreen').then((module) => ({
+    default: module.FloorPlanScreen,
+  })),
+);
+const LetterScreen = lazy(() =>
+  import('./components/LetterScreen').then((module) => ({
+    default: module.LetterScreen,
+  })),
+);
+const CertificateScreen = lazy(() =>
+  import('./components/CertificateScreen').then((module) => ({
+    default: module.CertificateScreen,
+  })),
+);
+const StudentsScreen = lazy(() =>
+  import('./components/StudentsScreen').then((module) => ({ default: module.StudentsScreen })),
+);
+const StudentProfileScreen = lazy(() =>
+  import('./components/StudentProfileScreen').then((module) => ({ default: module.StudentProfileScreen })),
+);
+const TimetableScreen = lazy(() =>
+  import('./components/TimetableScreen').then((module) => ({ default: module.TimetableScreen })),
+);
+const AttendanceScreen = lazy(() =>
+  import('./components/AttendanceScreen').then((module) => ({ default: module.AttendanceScreen })),
+);
+const ExamScreen = lazy(() =>
+  import('./components/ExamScreen').then((module) => ({ default: module.ExamScreen })),
+);
+const FeeScreen = lazy(() =>
+  import('./components/FeeScreen').then((module) => ({ default: module.FeeScreen })),
+);
+const BackupScreen = lazy(() =>
+  import('./components/BackupScreen').then((module) => ({ default: module.BackupScreen })),
+);
+const ImportScreen = lazy(() =>
+  import('./components/ImportScreen').then((module) => ({ default: module.ImportScreen })),
+);
+const HardwareScreen = lazy(() =>
+  import('./components/HardwareScreen').then((module) => ({ default: module.HardwareScreen })),
+);
+const LmsScreen = lazy(() =>
+  import('./components/LmsScreen').then((module) => ({ default: module.LmsScreen })),
+);
+const StaffOSScreen = lazy(() =>
+  import('./components/StaffOSScreen').then((module) => ({ default: module.StaffOSScreen })),
+);
+const PayrollScreen = lazy(() =>
+  import('./components/PayrollScreen').then((module) => ({ default: module.PayrollScreen })),
+);
+const EventScreen = lazy(() =>
+  import('./components/EventScreen').then((module) => ({ default: module.EventScreen })),
+);
+const TransportScreen = lazy(() =>
+  import('./components/TransportScreen').then((module) => ({ default: module.TransportScreen })),
+);
+const LibraryScreen = lazy(() =>
+  import('./components/LibraryScreen').then((module) => ({ default: module.LibraryScreen })),
+);
 
 // Auth gate + cockpit shell. Active module drives the workspace + ribbon;
 // a selected student opens the profile within the Students module.
@@ -69,27 +116,12 @@ export function App() {
   const [studentId, setStudentId] = useState<number | null>(null);
 
   // Gate 1: open a school file. Gate 2: sign in.
-  // The ServerControlFooter is rendered in BOTH gates too: if the backend hangs
-  // you can't open a school file or sign in, so the recovery controls must be
-  // reachable here (they talk to the Service Manager over Tauri IPC, not HTTP).
   if (!schoolOpened) {
-    return (
-      <>
-        <BackgroundLayer />
-        <WelcomeScreen />
-        <ServerControlFooter />
-      </>
-    );
+    return <WelcomeScreen />;
   }
 
   if (!token || !user) {
-    return (
-      <>
-        <BackgroundLayer />
-        <LoginPage />
-        <ServerControlFooter />
-      </>
-    );
+    return <LoginPage />;
   }
 
   const sessionUser: SessionUser = {
@@ -100,7 +132,7 @@ export function App() {
   const navigate = (key: string) => {
     setStudentId(null);
     useSelection.getState().clear();
-    setActive(key);
+    setActive(moduleAvailable(key) ? key : 'dashboard');
   };
 
   let screen: ReactNode;
@@ -124,6 +156,14 @@ export function App() {
       );
   } else if (active === 'staff') {
     screen = <StaffScreen />;
+  } else if (active === 'portal-accounts') {
+    screen = <PortalAccountsScreen />;
+  } else if (active === 'my-profile') {
+    screen = <PortalProfileScreen />;
+  } else if (active === 'lms') {
+    screen = <LmsScreen />;
+  } else if (active === 'lan-manager') {
+    screen = <Container size="lg" py="md"><LanConnectionManager /></Container>;
   } else if (active === 'courses') {
     screen = <CoursesScreen />;
   } else if (active === 'subjects') {
@@ -138,6 +178,8 @@ export function App() {
     screen = <TimingsScreen />;
   } else if (active === 'timetable') {
     screen = <TimetableScreen />;
+  } else if (active === 'faculty-planner') {
+    screen = <FacultyPlannerScreen />;
   } else if (active === 'substitution') {
     screen = <SubstitutionScreen />;
   } else if (active === 'attendance') {
@@ -186,12 +228,8 @@ export function App() {
     screen = <ImportScreen />;
   } else if (active === 'hardware') {
     screen = <HardwareScreen />;
-  } else if (active === 'design') {
-    screen = <DesignScreen />;
   } else if (active === 'tech-admin') {
     screen = <TechAdminScreen />;
-  } else if (active === 'server-control') {
-    screen = <ServerControlScreen />;
   } else if (active === 'letters') {
     screen = <LetterScreen />;
   } else if (active === 'certificates') {
@@ -221,20 +259,24 @@ export function App() {
   } else if (active === 'settings') {
     screen = <InstitutionSettingsScreen />;
   } else {
-    screen = <Placeholder screenKey={active} />;
+    screen = <RoleDashboard onNavigate={navigate} />;
   }
 
   return (
-    <>
-      <BackgroundLayer />
-      <CockpitShell
+    <CockpitShell
         user={sessionUser}
         active={active}
         onNavigate={navigate}
       >
-        {screen}
-      </CockpitShell>
-      <ServerControlFooter onOpenPanel={() => navigate('server-control')} />
-    </>
+        <Suspense
+          fallback={
+            <Center mih={240}>
+              <Loader aria-label="Loading module" />
+            </Center>
+          }
+        >
+          {screen}
+        </Suspense>
+    </CockpitShell>
   );
 }

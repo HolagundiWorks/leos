@@ -1,11 +1,3 @@
-import * as pdfjs from 'pdfjs-dist';
-
-// Vite resolves this worker URL at build/dev time.
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
-
 export interface RenderedPdf {
   dataUrl: string;
   width: number;
@@ -14,6 +6,13 @@ export interface RenderedPdf {
 
 // Render page 1 of a PDF file to a PNG data URL (used as the canvas backdrop).
 export async function pdfToImage(file: File, scale = 1.5): Promise<RenderedPdf> {
+  const pdfjs = await import('pdfjs-dist');
+  // Vite resolves this worker URL at build/dev time while the PDF engine itself
+  // stays out of the normal floor-plan chunk until a PDF is selected.
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString();
   const buf = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: buf }).promise;
   const page = await pdf.getPage(1);

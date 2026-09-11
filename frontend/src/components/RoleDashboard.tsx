@@ -13,18 +13,15 @@
 import { Badge, Button, Card, Container, Group, SimpleGrid, Skeleton, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, Bell, CalendarCheck, ClipboardList, TrendingUp, Users, Wallet } from 'lucide-react';
-import { ApiError } from '../api/client';
+import { request } from '../api/client';
 import { useAuth } from '../stores/auth';
 import { profileToLevel } from '../ribbon.config';
 import { DashboardScreen } from './DashboardPage';
+import { PortalProfileScreen } from './PortalProfileScreen';
 
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
-const authed = (token: string) => ({ Authorization: `Bearer ${token}` });
-
-async function apiFetch<T>(url: string, token: string): Promise<T> {
-  const r = await fetch(url, { headers: authed(token) });
-  if (!r.ok) throw new ApiError(`HTTP ${r.status}`, r.status);
-  return r.json() as Promise<T>;
+async function dashboardItems(token: string): Promise<QueueItem[]> {
+  const data = await request<{ items?: QueueItem[] } | QueueItem[]>('/dashboard/today', { token });
+  return Array.isArray(data) ? data : data.items ?? [];
 }
 
 interface DashStats { students: number; staff: number; sections: number; pending_fees: number; }
@@ -34,13 +31,13 @@ type QueueItem = { type: string; title: string; subtitle?: string };
 function TeacherDashboard({ token, onNavigate }: { token: string; onNavigate: (k: string) => void }) {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: () => apiFetch<DashStats>(`${BASE}/dashboard/stats`, token),
+    queryFn: () => request<DashStats>('/dashboard/stats', { token }),
     staleTime: 60_000,
   });
 
   const { data: queue } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => apiFetch<QueueItem[]>(`${BASE}/dashboard/today`, token),
+    queryFn: () => dashboardItems(token),
     staleTime: 30_000,
   });
 
@@ -104,13 +101,13 @@ function TeacherDashboard({ token, onNavigate }: { token: string; onNavigate: (k
 function AccountantDashboard({ token, onNavigate }: { token: string; onNavigate: (k: string) => void }) {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: () => apiFetch<DashStats>(`${BASE}/dashboard/stats`, token),
+    queryFn: () => request<DashStats>('/dashboard/stats', { token }),
     staleTime: 60_000,
   });
 
   const { data: queue } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => apiFetch<QueueItem[]>(`${BASE}/dashboard/today`, token),
+    queryFn: () => dashboardItems(token),
     staleTime: 30_000,
   });
 
@@ -148,7 +145,7 @@ function AccountantDashboard({ token, onNavigate }: { token: string; onNavigate:
 function ClassTeacherDashboard({ token, onNavigate }: { token: string; onNavigate: (k: string) => void }) {
   const { data: queue } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => apiFetch<QueueItem[]>(`${BASE}/dashboard/today`, token),
+    queryFn: () => dashboardItems(token),
     staleTime: 30_000,
   });
 
@@ -197,7 +194,7 @@ function ClassTeacherDashboard({ token, onNavigate }: { token: string; onNavigat
 function NoticeboardDashboard({ token }: { token: string }) {
   const { data: queue, isLoading } = useQuery({
     queryKey: ['dashboard-today'],
-    queryFn: () => apiFetch<QueueItem[]>(`${BASE}/dashboard/today`, token),
+    queryFn: () => dashboardItems(token),
     staleTime: 60_000,
   });
 
@@ -232,6 +229,8 @@ export function RoleDashboard({ onNavigate }: { onNavigate: (key: string) => voi
   const token = useAuth((s) => s.token)!;
   const profile = user?.profile ?? '';
   const level = profileToLevel(profile);
+
+  if (profile === 'parent' || profile === 'student') return <PortalProfileScreen />;
 
   // L1 — Principal gets the full principal dashboard
   if (level === 1) return <DashboardScreen onNavigate={onNavigate} />;

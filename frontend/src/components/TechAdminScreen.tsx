@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge,
   Button,
@@ -16,9 +16,11 @@ import {
   Alert,
   Divider,
   SimpleGrid,
+  TextInput,
+  PasswordInput,
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Database, Layers, Shield, Users, Wrench } from 'lucide-react';
+import { Activity, Cloud, Database, Layers, Shield, Users, Wrench } from 'lucide-react';
 import { useAuth } from '../stores/auth';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
@@ -324,6 +326,40 @@ function StaffHierarchyPanel({ token }: { token: string }) {
   );
 }
 
+function SupabasePanel({ token }: { token: string }) {
+  const [url, setUrl] = useState('');
+  const [anonKey, setAnonKey] = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const config = useQuery({
+    queryKey: ['supabase-config'],
+    queryFn: () => apiGet<{enabled:boolean;url:string;keyConfigured:boolean}>(token, '/integrations/supabase'),
+  });
+  useEffect(() => {
+    if (config.data) { setUrl(config.data.url); setEnabled(config.data.enabled); }
+  }, [config.data]);
+  const save = useMutation({
+    mutationFn: () => postJSON(token, '/integrations/supabase', { enabled, url, anonKey }),
+    onSuccess: () => { setAnonKey(''); void config.refetch(); },
+  });
+  const test = useMutation({
+    mutationFn: () => postJSON(token, '/integrations/supabase/test'),
+  });
+  const saveError = (save.data as {error?:string} | undefined)?.error;
+  const testResult = test.data as {ok?:boolean;error?:string} | undefined;
+  return <Stack gap="md">
+    <Alert color="blue">Optional cloud connection. Local SQLite remains authoritative and LEOS continues to work offline. Use the project URL and anon/publishable key only—never enter a service-role key.</Alert>
+    <Switch label="Enable Supabase connection" checked={enabled} onChange={(event)=>setEnabled(event.currentTarget.checked)} />
+    <TextInput label="Supabase project URL" placeholder="https://project-ref.supabase.co" value={url} onChange={(event)=>setUrl(event.currentTarget.value)} />
+    <PasswordInput label="Anon / publishable API key" description={config.data?.keyConfigured ? 'A key is already stored. Enter a value to replace it.' : undefined} value={anonKey} onChange={(event)=>setAnonKey(event.currentTarget.value)} />
+    {(saveError || testResult?.error) && <Alert color="red">{saveError ?? testResult?.error}</Alert>}
+    {testResult?.ok && <Alert color="green">Supabase REST connection succeeded.</Alert>}
+    <Group>
+      <Button loading={save.isPending} disabled={!url || anonKey.length < 20} onClick={()=>save.mutate()}>Save connection</Button>
+      <Button variant="light" loading={test.isPending} disabled={!config.data?.keyConfigured || !config.data?.enabled} onClick={()=>test.mutate()}>Test connection</Button>
+    </Group>
+  </Stack>;
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export function TechAdminScreen() {
   const token = useAuth((s) => s.token)!;
@@ -344,11 +380,13 @@ export function TechAdminScreen() {
               <Tabs.Tab value="health" leftSection={<Activity size={13} />}>System Health</Tabs.Tab>
               <Tabs.Tab value="modules" leftSection={<Layers size={13} />}>Module Control</Tabs.Tab>
               <Tabs.Tab value="hierarchy" leftSection={<Users size={13} />}>Staff Hierarchy</Tabs.Tab>
+              <Tabs.Tab value="supabase" leftSection={<Cloud size={13} />}>Supabase</Tabs.Tab>
               <Tabs.Tab value="security-link" leftSection={<Shield size={13} />}>Audit Log ↗</Tabs.Tab>
             </Tabs.List>
             <Tabs.Panel value="health"><SystemHealthPanel token={token} /></Tabs.Panel>
             <Tabs.Panel value="modules"><ModuleControlPanel token={token} /></Tabs.Panel>
             <Tabs.Panel value="hierarchy"><StaffHierarchyPanel token={token} /></Tabs.Panel>
+            <Tabs.Panel value="supabase"><SupabasePanel token={token} /></Tabs.Panel>
             <Tabs.Panel value="security-link">
               <Text size="sm" c="dimmed">Use the Security module (Audit Log tab) to view a full audit trail of all write actions.</Text>
             </Tabs.Panel>

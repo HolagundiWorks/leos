@@ -11,15 +11,15 @@ import {
   Stack,
   Text,
   TextInput,
-  ThemeIcon,
   Title,
+  Modal,
 } from '@mantine/core';
-import { CircleAlert, FilePlus2, FolderOpen, KeyRound, Layers } from 'lucide-react';
+import { CircleAlert, FilePlus2, FolderOpen, KeyRound, Wifi } from 'lucide-react';
 import { useAuth } from '../stores/auth';
-import { isTauri, LEOSDB_FILTER } from '../lib/tauriDialog';
 import { BrandWatermark } from './brand/BrandWatermark';
+import { LanConnectionManager } from './LanConnectionManager';
+import { BrandMark } from './brand/BrandMark';
 
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 const DEFAULT_FILE = 'school.leosdb';
 
 const INSTITUTION_TYPES = [
@@ -29,16 +29,6 @@ const INSTITUTION_TYPES = [
   { value: 'puc', label: 'PUC' },
 ];
 
-async function postJSON(path: string, body: object) {
-  const r = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await r.json().catch(() => ({}));
-  return { ok: r.ok, status: r.status, data } as { ok: boolean; status: number; data: { error?: string } };
-}
-
 /**
  * Pre-login gate: open an existing school file (path + master key) or create a
  * brand-new empty one. Either way the server's active DB is swapped so login
@@ -47,6 +37,7 @@ async function postJSON(path: string, body: object) {
 export function WelcomeScreen() {
   const setSchoolOpened = useAuth((s) => s.setSchoolOpened);
   const [mode, setMode] = useState<'open' | 'create'>('open');
+  const [lanOpen,setLanOpen]=useState(false);
 
   // shared
   const [error, setError] = useState<string | null>(null);
@@ -63,12 +54,19 @@ export function WelcomeScreen() {
   const [cPath, setCPath] = useState('');
   const [cKey, setCKey] = useState('');
   const [cKey2, setCKey2] = useState('');
+  const [cAdminPassword, setCAdminPassword] = useState('');
+  const [cAdminPassword2, setCAdminPassword2] = useState('');
+  const [cAcademicYear, setCAcademicYear] = useState('2026-27');
+  const hasNativeDialog = !!window.leosDesktop;
 
   const browseOpen = async () => {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
-      const sel = await open({ multiple: false, filters: LEOSDB_FILTER });
-      if (typeof sel === 'string') setPath(sel);
+      if (window.leosDesktop) {
+        const selected = await window.leosDesktop.chooseSchoolFile();
+        if (selected) setPath(selected);
+        return;
+      }
+      setError('File picker is only available in the Electron desktop app.');
     } catch {
       setError('File picker is only available in the desktop app.');
     }
@@ -76,10 +74,13 @@ export function WelcomeScreen() {
 
   const browseSave = async () => {
     try {
-      const { save } = await import('@tauri-apps/plugin-dialog');
       const suggested = `${(cName.trim() || 'My School').replace(/[^\w\- ]/g, '')}.leosdb`;
-      const sel = await save({ defaultPath: cPath || suggested, filters: LEOSDB_FILTER });
-      if (typeof sel === 'string') setCPath(sel);
+      if (window.leosDesktop) {
+        const selected = await window.leosDesktop.chooseNewSchoolFile(suggested);
+        if (selected) setCPath(selected);
+        return;
+      }
+      setError('File picker is only available in the Electron desktop app.');
     } catch {
       setError('File picker is only available in the desktop app.');
     }
@@ -89,10 +90,12 @@ export function WelcomeScreen() {
     setError(null);
     setBusy(true);
     try {
-      const { ok, status, data } = await postJSON('/school/open', { path: p.trim(), master_key: key });
-      if (status === 401) throw new Error('Invalid master key for this school file.');
-      if (!ok) throw new Error(data.error ?? `Could not open file (${status})`);
-      setSchoolOpened(true);
+      if (window.leosDesktop) {
+        await window.leosDesktop.openSchoolArchive({ path: p.trim(), masterKey: key });
+        setSchoolOpened(true);
+        return;
+      }
+      throw new Error('Opening a school file requires the Electron desktop app.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open school file');
     } finally {
@@ -103,15 +106,24 @@ export function WelcomeScreen() {
   const createSchool = async () => {
     setError(null);
     if (cKey !== cKey2) { setError('Master keys do not match.'); return; }
+    if (cAdminPassword !== cAdminPassword2) { setError('Admin passwords do not match.'); return; }
+    if (cKey.length < 8 || cAdminPassword.length < 8) { setError('Master key and admin password must be at least 8 characters.'); return; }
     const fileName = cPath.trim() || `${(cName.trim() || 'My School').replace(/[^\w\- ]/g, '')}.leosdb`;
     setBusy(true);
     try {
-      const made = await postJSON('/school/new', {
-        path: fileName, master_key: cKey, school_name: cName.trim() || 'My School', institution_type: cType,
-      });
-      if (!made.ok) throw new Error(made.data.error ?? 'Could not create school file');
-      // Open the freshly created file straight away.
-      await openSchool(fileName, cKey);
+      if (window.leosDesktop) {
+        await window.leosDesktop.createSchoolArchive({
+          path: fileName,
+          masterKey: cKey,
+          schoolName: cName.trim() || 'My School',
+          institutionType: cType as 'school' | 'pre-school' | 'college' | 'puc',
+          academicYear: cAcademicYear,
+          adminPassword: cAdminPassword,
+        });
+        setSchoolOpened(true);
+        return;
+      }
+      throw new Error('Creating a school file requires the Electron desktop app.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create school file');
       setBusy(false);
@@ -119,14 +131,12 @@ export function WelcomeScreen() {
   };
 
   return (
-    <Center mih="100vh" p="md" style={{ background: 'var(--mantine-color-gray-0)' }}>
+    <Center mih="100vh" p="md" style={{ background: 'var(--mantine-color-body)' }}>
       <BrandWatermark bottom={20} />
       <Card w={430} withBorder shadow="sm" radius="lg" p="xl">
         <Stack gap="lg">
           <Stack gap={6} align="center">
-            <ThemeIcon size={52} radius="lg" variant="light" color="brand">
-              <Layers size={26} strokeWidth={1.6} />
-            </ThemeIcon>
+            <BrandMark size={64} />
             <Title order={3} ta="center" c="gray.9">LEOS</Title>
             <Text size="xs" c="dimmed" ta="center" lh={1.4}>
               {mode === 'create' ? 'Set up a new school' : step === 'file' ? 'Open a school file to begin' : 'Enter the master key to unlock'}
@@ -144,8 +154,8 @@ export function WelcomeScreen() {
                   value={path}
                   onChange={(e) => setPath(e.currentTarget.value)}
                   leftSection={<FolderOpen size={15} />}
-                  rightSectionWidth={isTauri ? 84 : undefined}
-                  rightSection={isTauri ? (
+                  rightSectionWidth={hasNativeDialog ? 84 : undefined}
+                  rightSection={hasNativeDialog ? (
                     <Button size="compact-xs" variant="light" onClick={browseOpen}>Browse…</Button>
                   ) : undefined}
                   autoFocus
@@ -175,32 +185,37 @@ export function WelcomeScreen() {
             <Stack gap="sm">
               <TextInput label="School name" placeholder="e.g. Springfield High" value={cName} onChange={(e) => setCName(e.currentTarget.value)} autoFocus />
               <Select label="Institution type" data={INSTITUTION_TYPES} value={cType} onChange={(v) => setCType(v ?? 'school')} allowDeselect={false} />
+              <TextInput label="Academic year" placeholder="2026-27" value={cAcademicYear} onChange={(e) => setCAcademicYear(e.currentTarget.value)} />
               <TextInput
                 label="Save to"
-                placeholder={isTauri ? 'Choose a location…' : 'auto from name (server folder)'}
+                placeholder={hasNativeDialog ? 'Choose a location…' : 'auto from name (server folder)'}
                 value={cPath}
                 onChange={(e) => setCPath(e.currentTarget.value)}
                 leftSection={<FolderOpen size={15} />}
-                rightSectionWidth={isTauri ? 96 : undefined}
-                rightSection={isTauri ? (
+                rightSectionWidth={hasNativeDialog ? 96 : undefined}
+                rightSection={hasNativeDialog ? (
                   <Button size="compact-xs" variant="light" onClick={browseSave}>Choose…</Button>
                 ) : undefined}
               />
               <PasswordInput label="Master key" description="Set a database password" value={cKey} onChange={(e) => setCKey(e.currentTarget.value)} leftSection={<KeyRound size={15} />} />
               <PasswordInput label="Confirm master key" value={cKey2} onChange={(e) => setCKey2(e.currentTarget.value)} leftSection={<KeyRound size={15} />} />
+              <PasswordInput label="Admin password" description="Initial password for the admin account" value={cAdminPassword} onChange={(e) => setCAdminPassword(e.currentTarget.value)} />
+              <PasswordInput label="Confirm admin password" value={cAdminPassword2} onChange={(e) => setCAdminPassword2(e.currentTarget.value)} />
               <Group grow>
                 <Button variant="subtle" color="gray" onClick={() => { setError(null); setMode('open'); }}>Back</Button>
-                <Button onClick={createSchool} loading={busy} disabled={!cKey || !cKey2}>Create &amp; Open</Button>
+                <Button onClick={createSchool} loading={busy} disabled={!cKey || !cKey2 || !cAdminPassword || !cAdminPassword2}>Create &amp; Open</Button>
               </Group>
-              <Text size="xs" c="dimmed" ta="center">Sign in afterwards with <Text span fw={600}>admin / ChangeMe@3201</Text>.</Text>
+              <Text size="xs" c="dimmed" ta="center">Sign in afterwards as <Text span fw={600}>admin</Text> with the password set above.</Text>
             </Stack>
           )}
 
           <Text size="xs" c="dimmed" ta="center">
             A school's entire data lives in one portable <Text span fw={600}>.leosdb</Text> file.
           </Text>
+          {window.leosDesktop&&<Button variant="subtle" leftSection={<Wifi size={15}/>} onClick={()=>setLanOpen(true)}>Connect over school LAN</Button>}
         </Stack>
       </Card>
+      <Modal opened={lanOpen} onClose={()=>setLanOpen(false)} size="lg" title="School LAN connection"><LanConnectionManager compact onConnected={()=>{setSchoolOpened(true);setLanOpen(false);}}/></Modal>
     </Center>
   );
 }

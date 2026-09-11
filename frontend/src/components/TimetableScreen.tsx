@@ -43,13 +43,13 @@ const CELL_BG = [
   '#f0f8ff', '#f8f0f8',
 ];
 const CELL_BORDER = [
-  '#3E7B7B', '#4d8cf5', '#5C8A62', '#D9A441',
+  '#0F62FE', '#1192E8', '#24A148', '#F1C21B',
   '#7550e8', '#e85555', '#2a9965', '#e07070',
   '#2980b9', '#a040a0',
 ];
 
 function accent(subjectId: number | null) {
-  if (!subjectId) return { bg: '#f5f7fa', border: '#dee2e6' };
+  if (!subjectId) return { bg: '#f4f4f4', border: '#e0e0e0' };
   const i = (subjectId - 1) % CELL_BG.length;
   return { bg: CELL_BG[i], border: CELL_BORDER[i] };
 }

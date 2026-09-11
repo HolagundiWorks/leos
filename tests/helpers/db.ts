@@ -3,7 +3,7 @@
 //
 // We open the same file the test server is using (its LEOS_DATA_DIR). Open in
 // read-only mode so a test can never corrupt server state mid-run.
-import Database from 'better-sqlite3';
+import Database from '../../desktop/src/sqlite';
 
 export function openDb(dbPath: string): Database.Database {
   return new Database(dbPath, { readonly: true, fileMustExist: true });

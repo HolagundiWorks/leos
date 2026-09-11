@@ -20,7 +20,7 @@ import { useActiveYear } from '../../hooks/useAcademicYears';
 import { institutionTypeLabel } from '../../lib/institution';
 
 const FALLBACK_AY = '2026–27';
-// Translucent white chip for badges on the purple bar.
+// Translucent white chip for badges on the Learning Indigo bar.
 const chip = { root: { background: 'rgba(255,255,255,0.18)' }, label: { color: '#fff' } };
 
 export function UtilityStrip({ user }: { user: SessionUser }) {

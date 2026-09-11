@@ -1,5 +1,5 @@
 import { describe, it, expect, inject, beforeAll, afterAll } from 'vitest';
-import type Database from 'better-sqlite3';
+import type Database from '../../desktop/src/sqlite';
 import { openDb, count, tableNames } from '../helpers/db';
 
 // Asserts the migrated schema + demo seed are present in the live SQLite file

@@ -8,33 +8,30 @@ import {
 } from '@mantine/core';
 
 // ---------------------------------------------------------------------------
-// LEOS Brand Palette — per brand guide (Holagundi Consulting Works, 2026).
-// Primary accent: Muted Teal #3E7B7B
-// Success: Slate Green #5C8A62
-// Alert/Warning: Muted Amber #D9A441
-// Background: Soft White #F5F7FA
-// Primary UI shell: Deep Graphite #1E2329
+// LEOS Carbon-based semantic palette. Source of truth: docs/BRAND.md.
+// UI interaction uses Blue 60; the identity mark uses Purple 60 with Blue 60
+// and Cyan 50. Surfaces use Carbon White/G10/G90/G100 themes.
 // ---------------------------------------------------------------------------
 
-// LEOS Teal — primary action color (#3E7B7B at shade 5)
+// Purple — LEOS identity, with Purple 60 at shade 5
 const brand: MantineColorsTuple = [
-  '#e8f4f4', '#c4e3e3', '#9dd0d0', '#74bcbc', '#52a9a9',
-  '#3E7B7B', '#336666', '#295252', '#1e3d3d', '#122929',
+  '#f6f2ff', '#e8daff', '#d4bbff', '#be95ff', '#a56eff',
+  '#8a3ffc', '#6929c4', '#491d8b', '#31135e', '#1c0f30',
 ];
-// Slate Green — success (#5C8A62 at shade 5)
+// Carbon Green — success
 const mint: MantineColorsTuple = [
-  '#eef5ef', '#cde3cf', '#a9d0ac', '#84bc89', '#6da671',
-  '#5C8A62', '#4d7452', '#3d5d41', '#2c4530', '#1c2d1f',
+  '#defbe6', '#a7f0ba', '#6fdc8c', '#42be65', '#24a148',
+  '#198038', '#0e6027', '#044317', '#022d0d', '#071908',
 ];
-// Muted Amber — warnings, due dates (#D9A441 at shade 5)
+// Carbon Yellow/Orange — warnings and due dates
 const yellow: MantineColorsTuple = [
-  '#fdf5e8', '#f8e4b9', '#f3d08a', '#ecba5c', '#e3ab4b',
-  '#D9A441', '#b88836', '#906c2b', '#6d5120', '#4a3615',
+  '#fcf4d6', '#fddc69', '#f1c21b', '#d2a106', '#b28600',
+  '#8e6a00', '#684e00', '#483700', '#302400', '#1c1500',
 ];
 // Soft Blue — informational, secondary accent
 const sky: MantineColorsTuple = [
-  '#f0f6ff', '#dceeff', '#bad9ff', '#91beff', '#6da3ff',
-  '#4d8cf5', '#3871d8', '#2658b3', '#18418c', '#0e2d66',
+  '#edf5ff', '#d0e2ff', '#a6c8ff', '#78a9ff', '#4589ff',
+  '#0f62fe', '#0043ce', '#002d9c', '#001d6c', '#001141',
 ];
 // Violet — categorical accent (lavender-ish)
 const lavender: MantineColorsTuple = [
@@ -56,17 +53,17 @@ const sand: MantineColorsTuple = [
   '#faf6f0', '#f0e6d6', '#e0ccb0', '#cdb28a', '#bb9a6a',
   '#a8834e', '#8c6b3e', '#6f5430', '#533e23', '#382a17',
 ];
-// Graphite neutrals — bg, cards, borders, text (#F5F7FA lightest → #1E2329 darkest)
+// Carbon Gray — White/G10 through G100
 const gray: MantineColorsTuple = [
-  '#F5F7FA', '#EDF0F5', '#DDE3EC', '#C8D0DC', '#9BAABB',
-  '#6B7A91', '#4E5D72', '#364357', '#252F3F', '#1E2329',
+  '#ffffff', '#f4f4f4', '#e0e0e0', '#c6c6c6', '#a8a8a8',
+  '#8d8d8d', '#6f6f6f', '#525252', '#393939', '#161616',
 ];
 
 export const theme = createTheme({
-  primaryColor: 'brand',
+  primaryColor: 'sky',
   primaryShade: { light: 5, dark: 4 },
   white: '#FFFFFF',
-  black: '#1E2329',
+  black: '#161616',
   defaultRadius: 'md',
   colors: { brand, sky, mint, peach, rose, lavender, yellow, sand, gray },
   fontFamily:

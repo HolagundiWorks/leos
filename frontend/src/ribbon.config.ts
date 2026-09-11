@@ -30,7 +30,6 @@ import {
   Download,
   ArrowDownToLine,
   Cpu,
-  Palette,
   Map,
   DoorOpen,
   LayoutGrid,
@@ -50,10 +49,10 @@ import {
   Home,
   AlarmClock,
   PackageCheck,
-  Server,
   Mail,
   Award,
   Trophy,
+  Wifi,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -64,7 +63,6 @@ export interface RibbonAction {
   label: string;
   icon: LucideIcon;
   accessLevel?: UserLevel;  // max level that can access (lower = more restricted)
-  placeholder?: boolean;    // coming soon — shown greyed, non-clickable
   shortcut?: string;
   badge?: string;
 }
@@ -111,6 +109,7 @@ export const ribbonTabs: RibbonTab[] = [
         id: 'student-mgmt',
         label: 'Student Management',
         actions: [
+          { key: 'my-profile', label: 'My Profile', icon: UserCheck, accessLevel: 5 },
           { key: 'students', label: 'Students', icon: GraduationCap, accessLevel: 3 },
           { key: 'admissions', label: 'Admissions', icon: GraduationCap, accessLevel: 2 },
           { key: 'id-cards', label: 'ID Cards', icon: CreditCard, accessLevel: 2 },
@@ -123,6 +122,7 @@ export const ribbonTabs: RibbonTab[] = [
           { key: 'staff', label: 'Staff', icon: Users, accessLevel: 2 },
           { key: 'staff-os', label: 'HR & Leave', icon: Building2, accessLevel: 2 },
           { key: 'payroll', label: 'Payroll', icon: Banknote, accessLevel: 2 },
+          { key: 'portal-accounts', label: 'Portal Accounts', icon: Shield, accessLevel: 1 },
         ],
       },
     ],
@@ -157,6 +157,7 @@ export const ribbonTabs: RibbonTab[] = [
         actions: [
           { key: 'teacher-subjects', label: 'Teacher Map', icon: UserCheck, accessLevel: 2 },
           { key: 'library', label: 'Library', icon: BookOpen, accessLevel: 2 },
+          { key: 'lms', label: 'Learning Management', icon: BookOpen, accessLevel: 5 },
         ],
       },
     ],
@@ -172,6 +173,7 @@ export const ribbonTabs: RibbonTab[] = [
         label: 'Timetable Engine',
         actions: [
           { key: 'timetable', label: 'Timetable', icon: CalendarDays, accessLevel: 3 },
+          { key: 'faculty-planner', label: 'Faculty Planner', icon: CalendarRange, accessLevel: 4 },
         ],
       },
       {
@@ -308,13 +310,6 @@ export const ribbonTabs: RibbonTab[] = [
         ],
       },
       {
-        id: 'design-connect',
-        label: 'Design Connect',
-        actions: [
-          { key: 'design', label: 'Canva', icon: Palette, accessLevel: 2 },
-        ],
-      },
-      {
         id: 'compliance',
         label: 'Compliance',
         actions: [
@@ -332,7 +327,7 @@ export const ribbonTabs: RibbonTab[] = [
         actions: [
           { key: 'security', label: 'Audit & Roles', icon: Shield, accessLevel: 1 },
           { key: 'tech-admin', label: 'Tech Admin', icon: Wrench, accessLevel: 1 },
-          { key: 'server-control', label: 'Server', icon: Server, accessLevel: 1 },
+          { key: 'lan-manager', label: 'LAN Manager', icon: Wifi, accessLevel: 1 },
         ],
       },
     ],

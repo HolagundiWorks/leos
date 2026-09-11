@@ -1,5 +1,5 @@
 import { describe, it, expect, inject, beforeAll, afterAll } from 'vitest';
-import type Database from 'better-sqlite3';
+import type Database from '../../desktop/src/sqlite';
 import { authedApi } from '../helpers/api';
 import { openDb, count } from '../helpers/db';
 

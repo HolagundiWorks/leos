@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Alert,
   Badge,
@@ -14,13 +14,19 @@ import {
   Text,
   TextInput,
   Title,
-} from '@mantine/core';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle, Database, FileSpreadsheet, Upload } from 'lucide-react';
-import { useAuth } from '../stores/auth';
-import { MergePanel } from './MergePanel';
+} from "@mantine/core";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertCircle,
+  CheckCircle,
+  Database,
+  FileSpreadsheet,
+  Upload,
+} from "lucide-react";
+import { useAuth } from "../stores/auth";
+import { MergePanel } from "./MergePanel";
 
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
+const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8787";
 
 interface ImportJob {
   id: number;
@@ -38,48 +44,59 @@ interface ImportJob {
 const authed = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 async function apiJobs(token: string): Promise<{ jobs: ImportJob[] }> {
-  return fetch(`${BASE}/import/jobs`, { headers: authed(token) }).then((r) => r.json());
+  return fetch(`${BASE}/import/jobs`, { headers: authed(token) }).then((r) =>
+    r.json(),
+  );
 }
 
 async function postJSON(token: string, path: string, body: object) {
   return fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { ...authed(token), 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { ...authed(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }).then((r) => r.json());
 }
 
 const CSV_TARGETS = [
-  { value: 'students', label: 'Students' },
-  { value: 'staff', label: 'Staff' },
+  { value: "students", label: "Students" },
+  { value: "staff", label: "Staff" },
 ];
 
 const SQLITE_TABLES = [
-  { value: 'students', label: 'students' },
-  { value: 'staff', label: 'staff' },
-  { value: 'courses', label: 'courses' },
-  { value: 'subjects', label: 'subjects' },
+  { value: "students", label: "students" },
+  { value: "staff", label: "staff" },
+  { value: "courses", label: "courses" },
+  { value: "subjects", label: "subjects" },
 ];
 
 // ─── CSV Import panel ─────────────────────────────────────────────────────────
 function CsvPanel({ token }: { token: string }) {
   const qc = useQueryClient();
-  const [path, setPath] = useState('');
-  const [target, setTarget] = useState<string>('students');
-  const [result, setResult] = useState<{ ok?: boolean; rows_imported?: number; rows_failed?: number; error?: string } | null>(null);
+  const [path, setPath] = useState("");
+  const [target, setTarget] = useState<string>("students");
+  const [result, setResult] = useState<{
+    ok?: boolean;
+    rows_imported?: number;
+    rows_failed?: number;
+    error?: string;
+  } | null>(null);
 
   const csvMut = useMutation({
-    mutationFn: () => postJSON(token, '/import/csv', { path, target }),
-    onSuccess: (data) => { setResult(data); qc.invalidateQueries({ queryKey: ['import-jobs'] }); },
+    mutationFn: () => postJSON(token, "/import/csv", { path, target }),
+    onSuccess: (data) => {
+      setResult(data);
+      qc.invalidateQueries({ queryKey: ["import-jobs"] });
+    },
     onError: (e) => setResult({ error: String(e) }),
   });
 
   return (
     <Stack gap="sm">
       <Text size="sm" c="dimmed">
-        Import students or staff from a CSV file. Required columns depend on the target:
-        students → <code>first_name, last_name, email</code>; staff → <code>first_name, last_name, email, profile</code>.
-        Rows that already exist (by email) are skipped.
+        Import students or staff from a CSV file. Required columns depend on the
+        target: students → <code>first_name, last_name, email</code>; staff →{" "}
+        <code>first_name, last_name, email, profile</code>. Rows that already
+        exist (by email) are skipped.
       </Text>
       <Group align="flex-end" gap="sm">
         <TextInput
@@ -88,24 +105,61 @@ function CsvPanel({ token }: { token: string }) {
           value={path}
           onChange={(e) => setPath(e.currentTarget.value)}
           w={380}
+          rightSectionWidth={window.leosDesktop ? 84 : undefined}
+          rightSection={
+            window.leosDesktop ? (
+              <Button
+                size="compact-xs"
+                variant="light"
+                onClick={async () => {
+                  const file =
+                    await window.leosDesktop!.chooseImportFile("csv");
+                  if (file) setPath(file);
+                }}
+              >
+                Browse…
+              </Button>
+            ) : undefined
+          }
         />
-        <Select label="Target table" data={CSV_TARGETS} value={target} onChange={(v) => setTarget(v ?? 'students')} w={140} />
+        <Select
+          label="Target table"
+          data={CSV_TARGETS}
+          value={target}
+          onChange={(v) => setTarget(v ?? "students")}
+          w={140}
+        />
         <Button
           leftSection={<Upload size={14} />}
-          onClick={() => { setResult(null); csvMut.mutate(); }}
+          onClick={() => {
+            setResult(null);
+            csvMut.mutate();
+          }}
           loading={csvMut.isPending}
           disabled={!path.trim()}
-        >Import CSV</Button>
+        >
+          Import CSV
+        </Button>
       </Group>
-      {result && (
-        result.error ? (
-          <Alert icon={<AlertCircle size={14} />} color="red" title="Import failed">{result.error}</Alert>
-        ) : (
-          <Alert icon={<CheckCircle size={14} />} color="green" title="Import complete">
-            {result.rows_imported} row(s) imported, {result.rows_failed} skipped.
+      {result &&
+        (result.error ? (
+          <Alert
+            icon={<AlertCircle size={14} />}
+            color="red"
+            title="Import failed"
+          >
+            {result.error}
           </Alert>
-        )
-      )}
+        ) : (
+          <Alert
+            icon={<CheckCircle size={14} />}
+            color="green"
+            title="Import complete"
+          >
+            {result.rows_imported} row(s) imported, {result.rows_failed}{" "}
+            skipped.
+          </Alert>
+        ))}
     </Stack>
   );
 }
@@ -113,21 +167,29 @@ function CsvPanel({ token }: { token: string }) {
 // ─── SQLite Import panel ──────────────────────────────────────────────────────
 function SqlitePanel({ token }: { token: string }) {
   const qc = useQueryClient();
-  const [path, setPath] = useState('');
-  const [tables, setTables] = useState<string[]>(['students', 'staff']);
-  const [result, setResult] = useState<{ ok?: boolean; rows_imported?: number; error?: string } | null>(null);
+  const [path, setPath] = useState("");
+  const [tables, setTables] = useState<string[]>(["students", "staff"]);
+  const [result, setResult] = useState<{
+    ok?: boolean;
+    rows_imported?: number;
+    error?: string;
+  } | null>(null);
 
   const sqliteMut = useMutation({
-    mutationFn: () => postJSON(token, '/import/sqlite', { path, tables }),
-    onSuccess: (data) => { setResult(data); qc.invalidateQueries({ queryKey: ['import-jobs'] }); },
+    mutationFn: () => postJSON(token, "/import/sqlite", { path, tables }),
+    onSuccess: (data) => {
+      setResult(data);
+      qc.invalidateQueries({ queryKey: ["import-jobs"] });
+    },
     onError: (e) => setResult({ error: String(e) }),
   });
 
   return (
     <Stack gap="sm">
       <Text size="sm" c="dimmed">
-        Import directly from another SQLite database (e.g. another LEOS instance or openSIS export). Tables are
-        ATTACHED and rows copied with <code>INSERT OR IGNORE</code> — no duplicates.
+        Import compatible, allowlisted fields from another SQLite database. Use
+        Merge School File for students and staff when two copies have been
+        edited independently, so conflicts can be reviewed first.
       </Text>
       <Group align="flex-end" gap="sm" wrap="wrap">
         <TextInput
@@ -136,38 +198,76 @@ function SqlitePanel({ token }: { token: string }) {
           value={path}
           onChange={(e) => setPath(e.currentTarget.value)}
           w={380}
+          rightSectionWidth={window.leosDesktop ? 84 : undefined}
+          rightSection={
+            window.leosDesktop ? (
+              <Button
+                size="compact-xs"
+                variant="light"
+                onClick={async () => {
+                  const file =
+                    await window.leosDesktop!.chooseImportFile("database");
+                  if (file) setPath(file);
+                }}
+              >
+                Browse…
+              </Button>
+            ) : undefined
+          }
         />
       </Group>
       <Group gap="xs" mt={4}>
-        <Text size="sm" fw={500}>Tables to import:</Text>
+        <Text size="sm" fw={500}>
+          Tables to import:
+        </Text>
         {SQLITE_TABLES.map((t) => (
           <Badge
             key={t.value}
-            variant={tables.includes(t.value) ? 'filled' : 'outline'}
-            style={{ cursor: 'pointer' }}
+            variant={tables.includes(t.value) ? "filled" : "outline"}
+            style={{ cursor: "pointer" }}
             onClick={() =>
-              setTables((prev) => prev.includes(t.value) ? prev.filter((x) => x !== t.value) : [...prev, t.value])
+              setTables((prev) =>
+                prev.includes(t.value)
+                  ? prev.filter((x) => x !== t.value)
+                  : [...prev, t.value],
+              )
             }
-          >{t.label}</Badge>
+          >
+            {t.label}
+          </Badge>
         ))}
       </Group>
       <Group>
         <Button
           leftSection={<Database size={14} />}
-          onClick={() => { setResult(null); sqliteMut.mutate(); }}
+          onClick={() => {
+            setResult(null);
+            sqliteMut.mutate();
+          }}
           loading={sqliteMut.isPending}
           disabled={!path.trim() || tables.length === 0}
-        >Import SQLite</Button>
+        >
+          Import SQLite
+        </Button>
       </Group>
-      {result && (
-        result.error ? (
-          <Alert icon={<AlertCircle size={14} />} color="red" title="Import failed">{result.error}</Alert>
+      {result &&
+        (result.error ? (
+          <Alert
+            icon={<AlertCircle size={14} />}
+            color="red"
+            title="Import failed"
+          >
+            {result.error}
+          </Alert>
         ) : (
-          <Alert icon={<CheckCircle size={14} />} color="green" title="Import complete">
+          <Alert
+            icon={<CheckCircle size={14} />}
+            color="green"
+            title="Import complete"
+          >
             {result.rows_imported} row(s) imported.
           </Alert>
-        )
-      )}
+        ))}
     </Stack>
   );
 }
@@ -175,7 +275,7 @@ function SqlitePanel({ token }: { token: string }) {
 // ─── Job history panel ────────────────────────────────────────────────────────
 function JobHistoryPanel({ token }: { token: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['import-jobs'],
+    queryKey: ["import-jobs"],
     queryFn: () => apiJobs(token),
     staleTime: 30_000,
   });
@@ -183,10 +283,20 @@ function JobHistoryPanel({ token }: { token: string }) {
   const jobs = data?.jobs ?? [];
 
   const statusColor = (s: string | null) =>
-    s === 'completed' ? 'green' : s === 'error' ? 'red' : s === 'running' ? 'blue' : 'gray';
+    s === "completed"
+      ? "green"
+      : s === "error"
+        ? "red"
+        : s === "running"
+          ? "blue"
+          : "gray";
 
-  return isLoading ? <Skeleton height={150} radius="md" /> : jobs.length === 0 ? (
-    <Text size="sm" c="dimmed">No import jobs yet.</Text>
+  return isLoading ? (
+    <Skeleton height={150} radius="md" />
+  ) : jobs.length === 0 ? (
+    <Text size="sm" c="dimmed">
+      No import jobs yet.
+    </Text>
   ) : (
     <Table withTableBorder striped>
       <Table.Thead>
@@ -202,12 +312,34 @@ function JobHistoryPanel({ token }: { token: string }) {
       <Table.Tbody>
         {jobs.map((j) => (
           <Table.Tr key={j.id}>
-            <Table.Td><Text size="xs" c="dimmed">{j.created_at.slice(0, 16)}</Text></Table.Td>
-            <Table.Td><Badge size="xs" variant="outline">{j.source_type.toUpperCase()}</Badge></Table.Td>
-            <Table.Td><Text size="xs" lineClamp={1}>{j.source_path ?? '—'}</Text></Table.Td>
-            <Table.Td><Badge size="xs" color={statusColor(j.status)}>{j.status ?? 'pending'}</Badge></Table.Td>
-            <Table.Td><Text size="sm">{j.rows_imported}</Text></Table.Td>
-            <Table.Td><Text size="sm" c={j.rows_failed > 0 ? 'red' : undefined}>{j.rows_failed}</Text></Table.Td>
+            <Table.Td>
+              <Text size="xs" c="dimmed">
+                {j.created_at.slice(0, 16)}
+              </Text>
+            </Table.Td>
+            <Table.Td>
+              <Badge size="xs" variant="outline">
+                {j.source_type.toUpperCase()}
+              </Badge>
+            </Table.Td>
+            <Table.Td>
+              <Text size="xs" lineClamp={1}>
+                {j.source_path ?? "—"}
+              </Text>
+            </Table.Td>
+            <Table.Td>
+              <Badge size="xs" color={statusColor(j.status)}>
+                {j.status ?? "pending"}
+              </Badge>
+            </Table.Td>
+            <Table.Td>
+              <Text size="sm">{j.rows_imported}</Text>
+            </Table.Td>
+            <Table.Td>
+              <Text size="sm" c={j.rows_failed > 0 ? "red" : undefined}>
+                {j.rows_failed}
+              </Text>
+            </Table.Td>
           </Table.Tr>
         ))}
       </Table.Tbody>
@@ -218,7 +350,7 @@ function JobHistoryPanel({ token }: { token: string }) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export function ImportScreen() {
   const token = useAuth((s) => s.token)!;
-  const [tab, setTab] = useState('merge');
+  const [tab, setTab] = useState("merge");
 
   return (
     <Container size="xl" px={0}>
@@ -229,17 +361,25 @@ export function ImportScreen() {
         </Group>
 
         <Card>
-          <Tabs value={tab} onChange={(v) => setTab(v ?? 'csv')}>
+          <Tabs value={tab} onChange={(v) => setTab(v ?? "csv")}>
             <Tabs.List mb="md">
               <Tabs.Tab value="merge">Merge School File</Tabs.Tab>
               <Tabs.Tab value="csv">CSV Import</Tabs.Tab>
               <Tabs.Tab value="sqlite">SQLite Import</Tabs.Tab>
               <Tabs.Tab value="history">Job History</Tabs.Tab>
             </Tabs.List>
-            <Tabs.Panel value="merge"><MergePanel token={token} /></Tabs.Panel>
-            <Tabs.Panel value="csv"><CsvPanel token={token} /></Tabs.Panel>
-            <Tabs.Panel value="sqlite"><SqlitePanel token={token} /></Tabs.Panel>
-            <Tabs.Panel value="history"><JobHistoryPanel token={token} /></Tabs.Panel>
+            <Tabs.Panel value="merge">
+              <MergePanel token={token} />
+            </Tabs.Panel>
+            <Tabs.Panel value="csv">
+              <CsvPanel token={token} />
+            </Tabs.Panel>
+            <Tabs.Panel value="sqlite">
+              <SqlitePanel token={token} />
+            </Tabs.Panel>
+            <Tabs.Panel value="history">
+              <JobHistoryPanel token={token} />
+            </Tabs.Panel>
           </Tabs>
         </Card>
       </Stack>

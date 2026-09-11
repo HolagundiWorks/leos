@@ -9,6 +9,12 @@
   },
   "description": "LEOS automated test suite — Playwright (browser-mode E2E) + Vitest (API & DB) against an isolated local server.",
   "scripts": {
+    "desktop:install": "npm install --prefix desktop && npm install --prefix frontend",
+    "desktop:build": "npm run build --prefix frontend && npm run build --prefix desktop",
+    "desktop:package": "npm run build --prefix frontend && npm run package:win --prefix desktop",
+    "desktop:package:dir": "npm run build --prefix frontend && npm run package:dir --prefix desktop",
+    "desktop:dev": "npm run dev --prefix desktop",
+    "ui:dev": "npm run dev --prefix frontend",
     "test": "npm run test:api && npm run test:db && npm run test:e2e",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test --grep @smoke",
@@ -17,10 +23,12 @@
     "test:report": "playwright show-report tests/reports/playwright"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1",
-    "@types/node": "^22.10.5",
-    "better-sqlite3": "^11.8.1",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.2",
+    "bcryptjs": "^3.0.3",
+    "fflate": "^0.8.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   }
 }

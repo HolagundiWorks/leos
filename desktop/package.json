@@ -1,0 +1,77 @@
+{
+  "name": "leos-desktop",
+  "version": "0.3.0",
+  "private": true,
+  "description": "LEOS offline school operations desktop application",
+  "author": "Holagundi Works",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.js",
+    "verify:schema": "npm run build && node scripts/verify-schema.cjs",
+    "verify:finance": "npm run build && electron scripts/verify-finance.cjs && node scripts/cleanup-finance-test.cjs",
+    "verify:operations": "npm run build && electron scripts/verify-operations.cjs && node scripts/cleanup-operations-test.cjs",
+    "verify:staff-ops": "npm run build && electron scripts/verify-staff-ops.cjs && node scripts/cleanup-staff-ops-test.cjs",
+    "verify:coordination": "npm run build && electron scripts/verify-coordination.cjs && node scripts/cleanup-coordination-test.cjs",
+    "verify:backup": "npm run build && electron scripts/verify-backup.cjs && node scripts/cleanup-backup-test.cjs",
+    "verify:import": "npm run build && electron scripts/verify-import.cjs && node scripts/cleanup-import-test.cjs",
+    "verify:admin": "npm run build && electron scripts/verify-admin.cjs && node scripts/cleanup-admin-test.cjs",
+    "verify:portal-security": "npm run build && node scripts/verify-portal-security.cjs",
+    "verify:renderer-routes": "npm run build && node scripts/verify-renderer-routes.cjs",
+    "verify:records": "npm run build && electron scripts/verify-records.cjs && node scripts/cleanup-records-test.cjs",
+    "verify:cocurricular": "npm run build && electron scripts/verify-cocurricular.cjs && node scripts/cleanup-cocurricular-test.cjs",
+    "demo:create": "npm run build && node scripts/create-demo-school.cjs",
+    "verify:scheduling": "npm run build && electron scripts/verify-scheduling.cjs && node scripts/cleanup-scheduling-test.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "npm run build && cross-env LEOS_DESKTOP_DEV=1 electron .",
+    "start": "npm run build && electron .",
+    "package:dir": "npm run build && electron-builder --dir",
+    "package:win": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "fflate": "^0.8.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "cross-env": "^7.0.3",
+    "electron": "^41.10.7",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3"
+  },
+  "allowScripts": {
+    "electron@41.10.7": true,
+    "esbuild@0.25.12": true
+  },
+  "build": {
+    "appId": "in.hcworks.leos",
+    "productName": "LEOS",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/dist",
+        "to": "renderer"
+      }
+    ],
+    "directories": {
+      "output": "release-electron"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "LEOS-${version}-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

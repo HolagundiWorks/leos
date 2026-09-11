@@ -3,12 +3,8 @@ import { E2E_BASE_URL, E2E_SERVER_PORT, E2E_VITE_PORT } from './tests/helpers/en
 
 // Browser-mode E2E for LEOS.
 //
-// Tauri's WebView2 window can't be driven by Playwright, so we run the very
-// same React frontend in a headless browser via the Vite dev server, pointed
-// at an isolated Rust API server (started in tests/global/playwright-global.ts).
-// This covers all HTTP-backed flows (auth, CRUD, navigation, validation). The
-// only things it can't reach are native Tauri file dialogs — those are covered
-// by the API suite instead.
+// Browser-mode coverage uses the React renderer with an injected Electron
+// bridge backed by the isolated TypeScript router adapter.
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,

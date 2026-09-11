@@ -1,15 +1,16 @@
 import { Spotlight, type SpotlightActionData } from '@mantine/spotlight';
 import { Search } from 'lucide-react';
 import { ribbonTabs } from '../../ribbon.config';
+import { moduleAvailable } from '../../clientMode';
 
-/** Ctrl-K command palette: jump to any non-placeholder action in the ribbon. */
+/** Ctrl-K command palette: jump to any action in the ribbon. */
 export function CommandPalette({ onNavigate }: { onNavigate: (key: string) => void }) {
   const actions: SpotlightActionData[] = [];
 
   for (const tab of ribbonTabs) {
     for (const group of tab.groups) {
       for (const action of group.actions) {
-        if (action.placeholder) continue;
+        if (!moduleAvailable(action.key)) continue;
         const Icon = action.icon;
         actions.push({
           id: `nav-${action.key}`,

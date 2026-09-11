@@ -1,8 +1,6 @@
 // Shared constants for the LEOS test harness.
 //
-// Credentials mirror the server's seed (server/src/lib.rs `seed`): the demo
-// school file ships with admin / ChangeMe@3201 and the same string as the
-// master key (the database password that gates opening the .leosdb file).
+// Credentials belong only to the isolated TypeScript test fixture.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 

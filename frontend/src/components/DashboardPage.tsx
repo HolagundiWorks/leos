@@ -18,12 +18,10 @@ import { AlertTriangle, Building2, CalendarClock, CalendarHeart, ChevronRight, C
 import dayjs from 'dayjs';
 import type { LucideIcon } from 'lucide-react';
 import type { AccentColor } from '../theme';
-import { ApiError, type WorkItem } from '../api/client';
+import { request, type WorkItem } from '../api/client';
 import { useDashboardToday } from '../hooks/useDashboardToday';
 import { useAuth } from '../stores/auth';
 import { EventFab } from './EventFab';
-
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
 
 // ─── Stat card data ────────────────────────────────────────────────────────────
 interface DashStats { students: number; staff: number; sections: number; pending_fees: number; }
@@ -154,9 +152,7 @@ function AgendaSection({ token, onNavigate }: { token: string; onNavigate: (m: s
   const { data } = useQuery<AgendaData>({
     queryKey: ['dashboard-agenda'],
     queryFn: async () => {
-      const r = await fetch(`${BASE}/dashboard/agenda`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!r.ok) throw new ApiError(`HTTP ${r.status}`, r.status);
-      return r.json() as Promise<AgendaData>;
+      return request<AgendaData>('/dashboard/agenda', { token });
     },
     enabled: !!token,
     staleTime: 60_000,
@@ -250,9 +246,7 @@ export function DashboardScreen({ onNavigate }: { onNavigate: (module: string) =
   const { data: statsData } = useQuery<DashStats>({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const r = await fetch(`${BASE}/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!r.ok) throw new ApiError(`HTTP ${r.status}`, r.status);
-      return r.json() as Promise<DashStats>;
+      return request<DashStats>('/dashboard/stats', { token });
     },
     enabled: !!token,
     staleTime: 120_000,
@@ -261,9 +255,7 @@ export function DashboardScreen({ onNavigate }: { onNavigate: (module: string) =
   const { data: focusRaw } = useQuery<FocusData>({
     queryKey: ['dashboard-focus'],
     queryFn: async () => {
-      const r = await fetch(`${BASE}/dashboard/focus`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!r.ok) throw new ApiError(`HTTP ${r.status}`, r.status);
-      return r.json() as Promise<FocusData>;
+      return request<FocusData>('/dashboard/focus', { token });
     },
     enabled: !!token,
     staleTime: 60_000,

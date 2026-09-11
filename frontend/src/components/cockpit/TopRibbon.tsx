@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ribbonTabs, tabForModule, profileToLevel, type RibbonTab } from '../../ribbon.config';
 import { useAuth } from '../../stores/auth';
 import classes from './TopRibbon.module.css';
+import { moduleAvailable } from '../../clientMode';
 
 interface TopRibbonProps {
   active: string;           // current module key
@@ -39,7 +40,8 @@ export function TopRibbon({ active, onSelect, onTabChange }: TopRibbonProps) {
 
   // Filter tabs the user can see
   const visibleTabs = ribbonTabs.filter(
-    (t) => !t.accessLevel || userLevel <= t.accessLevel,
+    (t) => (!t.accessLevel || userLevel <= t.accessLevel) &&
+      t.groups.some((group) => group.actions.some((action) => moduleAvailable(action.key))),
   );
 
   const currentTab: RibbonTab =
@@ -85,7 +87,7 @@ export function TopRibbon({ active, onSelect, onTabChange }: TopRibbonProps) {
           {currentTab?.groups.map((group, gi) => {
             // Filter actions by user level
             const visibleActions = group.actions.filter(
-              (a) => !a.accessLevel || userLevel <= a.accessLevel,
+              (a) => (!a.accessLevel || userLevel <= a.accessLevel) && moduleAvailable(a.key),
             );
             if (visibleActions.length === 0) return null;
 
@@ -95,7 +97,7 @@ export function TopRibbon({ active, onSelect, onTabChange }: TopRibbonProps) {
                 <div className={classes.actionRow}>
                   {visibleActions.map((action) => {
                     const Icon = action.icon;
-                    const isActive = action.key === active && !action.placeholder;
+                    const isActive = action.key === active;
                     return (
                       <button
                         key={action.key}
@@ -103,14 +105,10 @@ export function TopRibbon({ active, onSelect, onTabChange }: TopRibbonProps) {
                         className={classes.actionBtn}
                         data-testid={`nav-${action.key}`}
                         data-active={isActive}
-                        data-placeholder={action.placeholder ?? false}
-                        disabled={action.placeholder}
-                        onClick={() => !action.placeholder && onSelect(action.key)}
-                        title={action.placeholder ? `${action.label} — coming soon` : action.label}
+                        onClick={() => onSelect(action.key)}
+                        title={action.label}
                         aria-label={action.label}
                         aria-current={isActive ? 'page' : undefined}
-                        aria-disabled={action.placeholder}
-                        tabIndex={action.placeholder ? -1 : 0}
                       >
                         <Icon size={20} strokeWidth={1.7} />
                         <span className={classes.actionLabel}>{action.label}</span>

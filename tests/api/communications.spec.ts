@@ -26,7 +26,7 @@ describe('API · communication log', () => {
 
     const acked = await client.post(`/student-communications/${id}/ack`, { acknowledged: true });
     expect(acked.status).toBe(200);
-    list = await client.get<{ messages: { acknowledged: boolean }[] }>(`/student-communications?student_id=${studentId}`);
+    list = await client.get<{ messages: { subject: string; acknowledged: boolean }[]; total: number }>(`/student-communications?student_id=${studentId}`);
     expect(list.body.messages[0].acknowledged).toBe(true);
   });
 });

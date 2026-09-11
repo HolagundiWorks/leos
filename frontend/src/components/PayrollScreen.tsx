@@ -233,15 +233,15 @@ function printPayslip(p: Payslip, schoolName: string) {
   const html = `<!DOCTYPE html>
 <html><head><title>Payslip — ${p.first_name} ${p.last_name} — ${p.month}</title>
 <style>
-  body { font-family: 'Segoe UI', sans-serif; max-width: 700px; margin: 40px auto; color: #1E2329; }
+  body { font-family: 'Segoe UI', sans-serif; max-width: 700px; margin: 40px auto; color: #161616; }
   h2 { margin: 0; font-size: 1.2rem; }
   .school { font-size: 0.85rem; color: #555; }
-  .header { border-bottom: 2px solid #3E7B7B; padding-bottom: 12px; margin-bottom: 20px; }
+  .header { border-bottom: 2px solid #0F62FE; padding-bottom: 12px; margin-bottom: 20px; }
   table { width: 100%; border-collapse: collapse; }
   td, th { padding: 6px 10px; border: 1px solid #ddd; font-size: 0.85rem; }
   th { background: #f0f4f8; }
   .total { font-weight: bold; background: #e8f4f4; }
-  .net { font-size: 1.1rem; font-weight: 700; color: #3E7B7B; }
+  .net { font-size: 1.1rem; font-weight: 700; color: #0F62FE; }
   @media print { body { margin: 10mm; } }
 </style></head><body>
 <div class="header">

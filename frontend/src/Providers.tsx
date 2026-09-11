@@ -13,7 +13,7 @@ import { queryClient } from './lib/queryClient';
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <MantineProvider theme={theme} defaultColorScheme="light">
+      <MantineProvider theme={theme} defaultColorScheme="auto">
         {children}
       </MantineProvider>
     </QueryClientProvider>

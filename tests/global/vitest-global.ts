@@ -1,4 +1,4 @@
-// Vitest global setup — starts ONE isolated LEOS server for the whole API+DB
+// Vitest global setup — starts one isolated TypeScript API adapter for API+DB
 // run and shares its base URL + DB path with every test via `provide`.
 import type { TestProject } from 'vitest/node';
 import { startTestServer, type TestServer } from '../helpers/server';

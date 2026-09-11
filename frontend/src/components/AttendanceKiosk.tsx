@@ -34,8 +34,8 @@ interface StudentRow {
 const STATUS_COLOR: Record<AttendanceStatus, string> = {
   present: '#5C8A62',
   absent: '#e03131',
-  late: '#D9A441',
-  excused: '#3E7B7B',
+  late: '#F1C21B',
+  excused: '#0F62FE',
   unmarked: '#868e96',
 };
 
@@ -139,7 +139,7 @@ export function AttendanceKiosk({ onExit }: { onExit?: () => void }) {
   const hasChanges = Object.keys(overrides).length > 0;
 
   return (
-    <Box style={{ minHeight: '100vh', background: '#1E2329', padding: '0 0 40px 0' }}>
+    <Box style={{ minHeight: '100vh', background: '#161616', padding: '0 0 40px 0' }}>
       {/* Header */}
       <Box style={{ background: 'rgba(62,123,123,0.08)', borderBottom: '1px solid rgba(62,123,123,0.18)', padding: '12px 24px' }}>
         <Group justify="space-between">
@@ -149,7 +149,7 @@ export function AttendanceKiosk({ onExit }: { onExit?: () => void }) {
                 <ChevronLeft size={18} />
               </ActionIcon>
             )}
-            <Layers size={20} color="#3E7B7B" />
+            <Layers size={20} color="#0F62FE" />
             <Text fw={700} size="md" c="white">LEOS · Quick Attendance</Text>
           </Group>
           <Text size="xs" c="dimmed">{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</Text>

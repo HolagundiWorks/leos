@@ -1,7 +1,6 @@
 name: tests
 
-# Full automated-test suite: builds the Rust API server, then runs the API
-# (Vitest), DB (better-sqlite3) and E2E (Playwright, browser-mode) tiers.
+# Single-stack test suite: TypeScript services, built-in SQLite, and renderer E2E.
 on:
   push:
     branches: [main]
@@ -15,24 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # ── Rust: build the leos-server binary the test harness spawns ──
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: server
-      - name: Build leos-server
-        run: cargo build --manifest-path server/Cargo.toml
-
-      # ── Node: root (test runners) + frontend (Vite dev server) deps ──
+      # Node 24 provides node:sqlite, matching the Electron application runtime.
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - name: Install root deps
         run: npm ci
       - name: Install frontend deps
         run: npm ci
         working-directory: frontend
+      - name: Install desktop deps
+        run: npm ci
+        working-directory: desktop
 
       # ── Playwright browser for the E2E tier ──
       - name: Install Playwright (chromium)
@@ -41,6 +35,8 @@ jobs:
       # ── Run everything: API + DB + E2E ──
       - name: Run test suite
         run: npm test
+      - name: Verify desktop build and route/security gates
+        run: npm run typecheck --prefix desktop && npm run verify:renderer-routes --prefix desktop && npm run verify:portal-security --prefix desktop
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}

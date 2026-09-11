@@ -33,7 +33,7 @@ describe('API · practical-exam SOP + mark locking', () => {
     expect(lock.status).toBe(200);
     expect(lock.body.marks_locked).toBe(true);
 
-    detail = await client.get<{ exam: { status: string } }>(`/practical-exams/${examId}`);
+    detail = await client.get<{ exam: { status: string }; marks: { student_name: string }[] }>(`/practical-exams/${examId}`);
     expect(detail.body.exam.status).toBe('Locked');
   });
 

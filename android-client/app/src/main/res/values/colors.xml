@@ -1,0 +1,25 @@
+<resources>
+    <!-- Carbon White/G10 light theme with Blue 60 interaction. -->
+    <color name="brand_primary">#0F62FE</color>
+    <color name="brand_on_primary">#FFFFFF</color>
+    <color name="brand_primary_container">#D0E2FF</color>
+    <color name="brand_on_primary_container">#001141</color>
+    <color name="brand_secondary">#8A3FFC</color>
+    <color name="brand_on_secondary">#FFFFFF</color>
+    <color name="brand_secondary_container">#E8DAFF</color>
+    <color name="brand_on_secondary_container">#1C0F30</color>
+    <color name="brand_tertiary">#0072C3</color>
+    <color name="brand_tertiary_container">#BAE6FF</color>
+    <color name="brand_surface">#FFFFFF</color>
+    <color name="brand_surface_container">#F4F4F4</color>
+    <color name="brand_on_surface">#161616</color>
+    <color name="brand_on_surface_variant">#525252</color>
+    <color name="brand_surface_variant">#F4F4F4</color>
+    <color name="brand_surface_lowest">#FFFFFF</color>
+    <color name="brand_surface_low">#F4F4F4</color>
+    <color name="brand_surface_high">#E8E8E8</color>
+    <color name="brand_surface_highest">#E0E0E0</color>
+    <color name="brand_outline">#8D8D8D</color>
+    <color name="brand_error">#DA1E28</color>
+    <color name="brand_icon_background">#FFFFFF</color>
+</resources>

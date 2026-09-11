@@ -1,4 +1,4 @@
-// Playwright global setup — starts an isolated LEOS API server for E2E and
+// Playwright global setup — starts an isolated TypeScript API adapter for E2E and
 // records its details so fixtures/tests (and teardown) can reach it.
 //
 // The browser-driven frontend talks to this server because the Vite dev server

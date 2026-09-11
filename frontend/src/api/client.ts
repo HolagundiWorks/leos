@@ -1,8 +1,10 @@
 import type { Role } from '../roles';
 
-// Base URL of the local LEOS API (Rust + SQLite) on :8787. Overridable via
-// VITE_API_BASE — e.g. a LAN server at http://192.168.1.10:8787.
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
+// The Electron renderer normally uses typed IPC. The HTTP base remains only for
+// the explicitly selected LAN-host transport.
+const BASE = import.meta.env.VITE_API_BASE ??
+  (window.location.protocol.startsWith('http') ? window.location.origin : 'http://localhost:8787');
+const USE_DESKTOP_IPC = import.meta.env.VITE_DATA_TRANSPORT === 'ipc';
 
 export class ApiError extends Error {
   status: number;
@@ -26,7 +28,30 @@ interface ReqOpts {
   body?: unknown;
 }
 
+export function request<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  return req<T>(path, opts);
+}
+
 async function req<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  if (USE_DESKTOP_IPC || window.leosDesktop) {
+    if (!window.leosDesktop) {
+      throw new ApiError('Electron IPC bridge is unavailable', 503);
+    }
+    const method = (opts.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    const response = await window.leosDesktop.request({
+      method,
+      path,
+      token: opts.token,
+      body: opts.body,
+    });
+    if (response.status < 200 || response.status >= 300) {
+      const message = (response.body as { error?: string } | null)?.error ??
+        `IPC ${response.status}`;
+      throw new ApiError(message, response.status);
+    }
+    return response.body as T;
+  }
+
   const res = await fetch(`${BASE}${path}`, {
     method: opts.method ?? 'GET',
     headers: {
@@ -1140,3 +1165,51 @@ export function saveFloorPlan(token: string, data: FloorPlanData) {
     body: { name: 'Floor Plan', data },
   });
 }
+
+export type PlanPeriod = 'daily' | 'weekly' | 'monthly';
+export interface FacultyPlan {
+  id: number; period_type: PlanPeriod; title: string; start_date: string; end_date: string;
+  section_id: number | null; section_name: string | null; subject_id: number | null; subject_name: string | null;
+  lessons: string | null; activities: string | null; schedule: string | null; objectives: string | null;
+  resources: string | null; assessment: string | null; notes: string | null; status: 'draft' | 'ready' | 'completed';
+  faculty_name: string | null; created_at: string; updated_at: string;
+}
+export type FacultyPlanInput = Pick<FacultyPlan, 'period_type' | 'title' | 'start_date' | 'end_date'> &
+  Partial<Pick<FacultyPlan, 'section_id' | 'subject_id' | 'lessons' | 'activities' | 'schedule' | 'objectives' | 'resources' | 'assessment' | 'notes' | 'status'>>;
+export function fetchFacultyPlans(token: string, period: PlanPeriod, from?: string, to?: string) {
+  const q = new URLSearchParams({ period_type: period }); if (from) q.set('from', from); if (to) q.set('to', to);
+  return req<{ plans: FacultyPlan[]; total: number }>(`/faculty-plans?${q}`, { token });
+}
+export function createFacultyPlan(token: string, data: FacultyPlanInput) {
+  return req<{ ok: boolean; id: number }>('/faculty-plans', { method: 'POST', token, body: data });
+}
+export function updateFacultyPlan(token: string, id: number, data: Partial<FacultyPlanInput>) {
+  return req<{ ok: boolean }>(`/faculty-plans/${id}/update`, { method: 'POST', token, body: data });
+}
+export function deleteFacultyPlan(token: string, id: number) {
+  return req<{ ok: boolean }>(`/faculty-plans/${id}/delete`, { method: 'POST', token, body: {} });
+}
+
+export interface PortalAccount { id:number; username:string; role:'teacher'|'parent'|'student'; name:string; level:number; staff_id:number|null; staff_name:string|null; student_names:string|null; student_ids:string|null }
+export interface PortalStudent extends StudentDetail { section_id:number|null; section_name:string|null; class_name:string|null; attendance_pct:number|null; recent_marks:Array<{term:string|null;subject:string|null;max_marks:number|null;marks:number|null;grade:string|null;remarks:string|null}>; communications:Array<{id:number;channel:string|null;direction:string|null;subject:string|null;body:string|null;acknowledged:number;created_at:string|null}> }
+export interface PortalProfile { user:{id:number;username:string;role:string;name:string;level:number}; staff:(Staff & {department?:string|null;employee_id?:string|null;join_date?:string|null;sections_count:number;subjects_count:number})|null; students:PortalStudent[] }
+export function fetchPortalProfile(token:string){return req<PortalProfile>('/portal/profile',{token});}
+export function fetchPortalAccounts(token:string){return req<{accounts:PortalAccount[];total:number}>('/portal/accounts',{token});}
+export function createPortalAccount(token:string,data:{username:string;password:string;role:'teacher'|'parent'|'student';name:string;staff_id?:number|null;student_ids?:number[]}){return req<{ok:boolean;id:number}>('/portal/accounts',{method:'POST',token,body:data});}
+export function resetPortalPassword(token:string,id:number,password:string){return req<{ok:boolean}>(`/portal/accounts/${id}/reset-password`,{method:'POST',token,body:{password}});}
+export function deletePortalAccount(token:string,id:number){return req<{ok:boolean}>(`/portal/accounts/${id}/delete`,{method:'POST',token,body:{}});}
+
+export interface LmsSubmission { id:number; assignment_id:number; student_id:number; content:string|null; attachment:string|null; status:string; submitted_at:string|null; score:number|null; feedback:string|null; first_name?:string; last_name?:string }
+export interface LmsAssignment { id:number; space_id:number; module_id:number|null; title:string; instructions:string|null; due_date:string|null; max_points:number; is_published:boolean; my_submissions:LmsSubmission[] }
+export interface LmsLesson { id:number; module_id:number; title:string; content:string|null; objectives:string|null; resources:string|null; sort_order:number; is_published:boolean }
+export interface LmsModule { id:number; space_id:number; title:string; description:string|null; sort_order:number; is_published:boolean; lessons:LmsLesson[] }
+export interface LmsSpace { id:number; title:string; description:string|null; subject_id:number|null; subject_name:string|null; section_id:number; class_name:string|null; section_name:string|null; is_published:boolean; modules_count?:number; assignments_count?:number; modules?:LmsModule[]; assignments?:LmsAssignment[] }
+export function fetchLmsSpaces(token:string){return req<{spaces:LmsSpace[];total:number}>('/lms/spaces',{token});}
+export function fetchLmsSpace(token:string,id:number){return req<{space:LmsSpace}>(`/lms/spaces/${id}`,{token});}
+export function createLmsSpace(token:string,data:{title:string;description?:string|null;subject_id?:number|null;section_id:number;is_published?:boolean}){return req<{ok:boolean;id:number}>('/lms/spaces',{method:'POST',token,body:data});}
+export function createLmsModule(token:string,data:{space_id:number;title:string;description?:string|null;is_published?:boolean}){return req<{ok:boolean;id:number}>('/lms/modules',{method:'POST',token,body:data});}
+export function createLmsLesson(token:string,data:{module_id:number;title:string;content?:string|null;objectives?:string|null;resources?:string|null;is_published?:boolean}){return req<{ok:boolean;id:number}>('/lms/lessons',{method:'POST',token,body:data});}
+export function createLmsAssignment(token:string,data:{space_id:number;module_id?:number|null;title:string;instructions?:string|null;due_date?:string|null;max_points?:number;is_published?:boolean}){return req<{ok:boolean;id:number}>('/lms/assignments',{method:'POST',token,body:data});}
+export function submitLmsAssignment(token:string,data:{assignment_id:number;student_id:number;content?:string|null;attachment?:string|null}){return req<{ok:boolean;id:number}>('/lms/submissions',{method:'POST',token,body:data});}
+export function fetchLmsSubmissions(token:string,assignmentId:number){return req<{submissions:LmsSubmission[];total:number}>(`/lms/assignments/${assignmentId}/submissions`,{token});}
+export function gradeLmsSubmission(token:string,id:number,data:{score:number;feedback?:string|null}){return req<{ok:boolean}>(`/lms/submissions/${id}/grade`,{method:'POST',token,body:data});}

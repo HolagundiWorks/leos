@@ -2,7 +2,7 @@ import { describe, it, expect, inject, beforeAll, afterAll } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import Database from 'better-sqlite3';
+import Database from '../../desktop/src/sqlite';
 import { authedApi, type ApiClient } from '../helpers/api';
 
 // Merge a second school file (concurrent offline edits): we author an external

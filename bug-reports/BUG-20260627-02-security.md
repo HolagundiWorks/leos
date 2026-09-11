@@ -1,4 +1,4 @@
-# Security Finding — Server does not enforce user levels (broken access control)
+# Security Finding — Complete the staff-route permission matrix
 
 | Field | Value |
 |---|---|
@@ -9,58 +9,51 @@
 | **Found by** | manual review while scoping the L1–L5 permission test matrix |
 | **LEOS version** | 0.2.0 |
 | **Layer** | API |
-| **Status** | 🟡 Partially fixed 2026-06-27 — /admin/* + /audit-log now L1-gated; finer per-module gating is follow-up |
+| **Status** | 🟡 Mitigated — privileged routes and portal isolation are enforced; complete staff-role matrix coverage remains |
 
 ## Summary
-Every protected route is guarded only by `with_auth`, which checks that the
-bearer token maps to *some* logged-in user. It never checks that user's `level`
-or `role`. The L1–L5 model (Principal … Parent/Student) is enforced **only in the
-React ribbon** (`profileToLevel` / `accessLevel` filtering). The API itself
-grants every authenticated user full access to every endpoint.
 
-## Impact
-A low-level user (e.g. L5 parent/student) who is authenticated can call any API
-directly (curl, devtools, a script) and:
-- read/modify/delete any student, staff, class, fee, exam, etc.;
-- hit admin endpoints, including **`POST /admin/users/:id/level`** to set their
-  own account to L1 (full privilege escalation);
-- toggle modules, read the audit log, etc.
+The original Rust authorization defect is retired with that runtime. The
+TypeScript `ApiRouter` now enforces L1 on administrative operations, explicit
+levels on migrated write operations, and a fail-closed route allowlist for
+parent/student portal sessions. The remaining work is to prove the complete
+L1–L4 staff-role matrix against every route, independent of renderer visibility.
 
-The UI hiding a button does not protect the data — the endpoint is open.
+## Residual risk
 
-## Evidence
-- `with_auth` (server/src/lib.rs) resolves only `token -> uid` and calls the
-  handler; it performs no level/role check.
-- Admin handlers are wired as `with_auth(state, token, |_| admin_...())` — the
-  uid is discarded (`|_|`), so no caller-level check happens even there. E.g.
-  `GET /admin/users/levels`, `POST /admin/users/:id/level`.
-- `users.level` exists (default 3) and `module_settings.min_level` exists, but
-  neither is consulted during request dispatch.
+Any staff route whose expected level is not covered by the permission matrix
+could drift from the access advertised by the ribbon. Renderer visibility is
+not a security boundary, so server-side checks and tests remain required.
 
-## Steps to reproduce
-1. Create/login as an L5 user (or set any user to level 5 via the UI).
-2. With that user's token: `POST /admin/users/<own-id>/level {"level":1}`.
-3. Response is `200 {"ok":true,"level":1}` — the low-level user is now L1.
+## Current evidence
 
-## Suggested fix (server-side enforcement)
-1. Track the caller's level in the session (or look it up by uid in `with_auth`).
-2. Add a `require_level(max_level)` guard and apply it to handlers — at minimum
-   gate all `/admin/*` routes to L1, and write routes to the level that the
-   ribbon already advertises (`accessLevel` in `ribbon.config.ts` is the spec).
-3. Consult `module_settings.min_level` for module-scoped routes.
+- `desktop/src/api-router.ts` calls `AuthService.requireLevel` for privileged
+  operations.
+- Parent/student sessions are limited to `/portal/profile` and `/lms/*` before
+  general route dispatch.
+- `tests/api/permissions.spec.ts` verifies L5 denial on admin routes and blocks
+  self-escalation, and exercises representative L2–L4 read boundaries.
+- `desktop/scripts/verify-portal-security.cjs` verifies linked-profile scoping,
+  LMS access, and denial of general routes.
+
+## Remaining work
+
+1. Generate a route inventory with the expected L1–L4 read/write level.
+2. Test each route with allowed and denied staff roles.
+3. Keep `module_settings.min_level` and `frontend/src/ribbon.config.ts` aligned
+   with the server-side policy.
 
 ## Test implications
 The L1–L5 permission matrix asserts that a low-level token is **denied** (403) on
 privileged routes. Implemented in `tests/api/permissions.spec.ts`.
 
-## Resolution (2026-06-27) — phase 1
-Added server-side enforcement in `server/src/lib.rs`:
-- `profile_to_level(role)` mirrors the frontend `profileToLevel`.
-- `user_level(state, uid)` resolves the caller's level from their stored role.
-- `require_level(state, token, max_level, f)` returns **403** when the caller is
-  below the required level.
-- All `/admin/*` routes and `/audit-log` are now gated to **L1** — this closes
-  the privilege-escalation path (`POST /admin/users/:id/level`).
+## Resolution
+
+The TypeScript authentication service resolves the stored role/level and
+`requireLevel` returns 403 below the route's allowed level. All `/admin/*`
+routes and `/audit-log` are L1-gated, closing the original privilege-escalation
+path. Parent/student accounts additionally fail closed outside their personal
+profile and LMS routes.
 
 Verified by `tests/api/permissions.spec.ts`: an L5 user gets 403 on every admin
 route and cannot escalate; the L1 admin still gets 200.

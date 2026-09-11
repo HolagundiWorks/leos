@@ -15,8 +15,7 @@ interface CockpitShellProps {
 }
 
 /**
- * LEOS cockpit: Deep Graphite utility strip + translucent ribbon over the
- * full-height workspace. No footer.
+ * LEOS cockpit: Carbon G100 utility strip and neutral workspace.
  */
 export function CockpitShell({ user, active, onNavigate, children }: CockpitShellProps) {
   // The Dashboard ('home') tab hides its action ribbon, so the header shrinks
@@ -31,7 +30,7 @@ export function CockpitShell({ user, active, onNavigate, children }: CockpitShel
       if (e.altKey && !e.ctrlKey && !e.metaKey && /^[1-9]$/.test(e.key)) {
         const idx = Number(e.key) - 1;
         const firstAction = ribbonTabs[idx]?.groups[0]?.actions[0];
-        if (firstAction && !firstAction.placeholder) {
+        if (firstAction) {
           e.preventDefault();
           onNavigate(firstAction.key);
         }
@@ -47,12 +46,12 @@ export function CockpitShell({ user, active, onNavigate, children }: CockpitShel
       <AppShell header={{ height: headerHeight }} padding="md">
         <AppShell.Header style={{ borderBottom: 'none' }}>
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* Deep Graphite utility strip */}
+            {/* Carbon G100 utility strip */}
             <div
               style={{
                 height: 44,
                 flexShrink: 0,
-                background: '#1E2329',
+                background: '#161616',
               }}
             >
               <UtilityStrip user={user} />

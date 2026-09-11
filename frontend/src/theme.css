@@ -1,52 +1,43 @@
-/* LEOS global theme — liquid-glass surfaces over the animated background. */
+/* LEOS institutional brand — source of truth: docs/BRAND.md. */
+:root {
+  --leos-brand-purple: #8a3ffc;
+  --leos-interactive: #0f62fe;
+  --leos-complement: #1192e8;
+  --leos-background: #f4f4f4;
+  --leos-surface: #ffffff;
+  --leos-text: #161616;
+  --leos-error: #da1e28;
+  --leos-warning: #f1c21b;
+  --leos-success: #24a148;
+  color-scheme: light dark;
+}
 
-/* =========================================================================
-   Liquid-glass theme — animated SVG background + frosted surfaces
-   ========================================================================= */
 html,
 body,
 #leos-app {
-  background: transparent;
-}
-body {
-  /* soft fallback shown behind the animated SVG while it loads */
-  background: #e9f3ff;
+  background: var(--leos-background);
+  color: var(--leos-text);
 }
 
-/* Fixed, full-viewport animated background behind all app content. */
-.app-bg-img {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
-  z-index: -1;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* IBM Carbon tints (r,g,b triplets) used for the glass surfaces. */
-:root {
-  --carbon-blue-10: 237, 245, 255; /* #edf5ff */
-  --carbon-cool-10: 242, 244, 248; /* #f2f4f8 */
-  --carbon-gray-100: 22, 22, 22; /* #161616 */
-}
-
-/* Header transparent so the translucent ribbon shows the animated background;
-   the top utility strip carries the bold purple (set in CockpitShell). */
 .mantine-AppShell-header {
-  background: transparent !important;
-  border: none !important;
-}
-.mantine-AppShell-main {
-  background: transparent !important;
+  background: var(--leos-surface) !important;
+  border-color: var(--mantine-color-gray-2) !important;
 }
 
-/* Content cards → subtle Carbon-tinted glass (blue 10), more transparent. */
+.mantine-AppShell-main {
+  background: var(--leos-background) !important;
+}
+
 .mantine-Card-root {
-  background: rgba(var(--carbon-blue-10), 0.46) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  backdrop-filter: blur(16px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 8px 24px rgba(var(--carbon-gray-100), 0.06);
+  background: var(--leos-surface) !important;
+  border-color: var(--mantine-color-gray-2) !important;
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --leos-background: #161616;
+    --leos-surface: #262626;
+    --leos-text: #f4f4f4;
+  }
 }

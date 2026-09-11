@@ -1,80 +1,66 @@
-# LEOS — Deployment
+# LEOS deployment
 
-How to build and ship the LEOS Windows desktop app, and what to decide before a
-production release.
+LEOS ships as one Windows Electron application. The React renderer, TypeScript
+application services, and Node's built-in SQLite engine are packaged together;
+there is no localhost server, sidecar, Rust runtime, WebView2 bootstrapper, or
+native database add-on.
 
-## Build a release
+## Build
 
-Prerequisites: Rust (stable, `x86_64-pc-windows-msvc`), Node 18+, and the Tauri
-CLI (`cargo install tauri-cli` — this repo uses 2.x). On the first bundle Tauri
-downloads NSIS/WiX automatically (needs internet once).
+Prerequisite: Node.js 24 or newer. Install dependencies once:
 
-```bash
-cd src-tauri
-cargo tauri build
+```powershell
+npm run desktop:install
 ```
 
-`beforeBuildCommand` runs [`scripts/prepare-build.mjs`](../scripts/prepare-build.mjs),
-which:
-1. builds the standalone backend (`cargo build --release` in `server/`),
-2. copies it to the Tauri **sidecar** path
-   `src-tauri/binaries/leos-server-<target-triple>.exe` (declared as
-   `bundle.externalBin` in `tauri.conf.json`),
-3. builds the frontend (`frontend/dist`).
+Build an unpacked application with `npm run desktop:package:dir`, or build the
+Windows NSIS installer with `npm run desktop:package`.
 
-Tauri then bundles **LEOS.exe + the `leos-server` sidecar + WebView2 bootstrapper**
-into an installer.
+Generated files are ignored under `desktop/release-electron/`. If real-time
+scanning locks Electron's temporary extraction directory, build under `%TEMP%`:
 
-**Output:** `src-tauri/target/release/bundle/` → `nsis/LEOS_<ver>_x64-setup.exe`
-and `msi/LEOS_<ver>_x64_en-US.msi`.
-
-## How it runs once installed
-
-- The installer places `LEOS.exe` and `leos-server.exe` together in the install
-  dir. On launch, the **Service Manager** locates the sidecar next to the
-  executable and supervises it (start/stop/restart/health/logs/repair from
-  System → Server). See [`server-control.md`](server-control.md).
-- If the sidecar is somehow missing, LEOS falls back to running the backend
-  embedded in-process, so the app still works (control panel shows it unmanaged).
-- All data lives in `%LOCALAPPDATA%\LEOS` (`school.sqlite`, `school.leosdb`,
-  backups). Uninstalling the app does **not** remove that folder.
-
-## Readiness checklist
-
-| Item | Status |
-|---|---|
-| Automated test suite (API/DB/E2E) green | ✅ |
-| Server-side admin permission enforcement | ✅ (general write-route gating = phase 2) |
-| In-app Server Control Panel | ✅ |
-| Sidecar packaging (`externalBin` + prepare script) | ✅ |
-| Frontend production build | ✅ |
-| WebView2 runtime | ✅ Tauri bundles the bootstrapper by default |
-| Backend as Windows Service (headless / boot autostart) | ⬜ phase 2 (`server-control.md`) |
-| **Code signing** | ⬜ decision — unsigned installers trigger SmartScreen warnings; needs an Authenticode cert |
-| **Default credentials** | ⚠️ decision — see below |
-| **App version** | ✅ `0.3.0` (`tauri.conf.json` + `src-tauri/Cargo.toml`); tag the merge commit `v0.3.0` |
-| Installer smoke test on a clean Windows VM | ⬜ manual (see `test-plan.md` §5) |
-
-## Security notes (decide before shipping)
-
-- **Default credentials.** A brand-new school created via the welcome screen sets
-  its own master key + admin password. Only the **bundled demo** `school.leosdb`
-  uses `admin` / `ChangeMe@3201`. Decide whether to ship the demo file at all, or
-  force a credential change on first run.
-- **Code signing.** Sign `LEOS.exe`, `leos-server.exe`, and the installer with an
-  Authenticode certificate to avoid SmartScreen blocks. Configure under
-  `bundle.windows.certificateThumbprint` (or sign in CI).
-- **CSP** is currently `null` (`tauri.conf.json`). Tighten it for production if
-  the webview ever loads remote content (today it loads only bundled assets +
-  localhost API).
-
-## Versioning
-
-The release version is **0.3.0** (`src-tauri/tauri.conf.json` →
-`LEOS_0.3.0_x64-setup.exe`, kept in sync with `src-tauri/Cargo.toml`). For each
-release bump both, then tag the **merge commit on `main`**:
-
-```bash
-git tag -a v0.3.0 -m "LEOS 0.3.0"
-git push origin v0.3.0
+```powershell
+cd desktop
+npx electron-builder --win nsis --config.directories.output="$env:TEMP\leos-installer-build"
 ```
+
+## Data retention
+
+The active database lives under `%LOCALAPPDATA%\LEOS\school.sqlite` by default.
+Portable `.leosdb` archives contain a SQLite snapshot and SHA-256 checksum. The
+NSIS configuration intentionally preserves application data on uninstall.
+
+## Verified build evidence
+
+- Electron 41.10.7 and the current lockfile report zero npm audit findings.
+- Packaging needs no Python, Visual Studio, node-gyp, or native module rebuild.
+- The packaged main, renderer, utility, and GPU processes launch successfully.
+- Packaged `app.asar` and renderer resources are present.
+- The executable and installer use the LEOS open-book identity rather than the
+  default Electron icon.
+- A 64-bit assisted NSIS installer is generated as
+  `LEOS-0.3.0-x64-setup.exe`.
+- Current local artifact: 98,739,403 bytes; SHA-256
+  `D4EC9FCED298AB17CE5F5A139B6F0FCF8969DA32541616B77BD9EC4E51B85173`.
+
+Android LAN debug client:
+
+- `android-client/release-artifacts/LEOS-LAN-0.5.0-carbon-debug.apk`
+- Native Material 3 Android client with Carbon colour tokens; it does not
+  embed the LEOS web interface.
+- SHA-256 `048E2555CC2749593CD9C4535BD27DD8977C51E2CD87B027265EF30757D00BE6`
+- Install only for trusted testing; produce a signed release APK/AAB after TLS
+  and physical-device validation.
+
+## Clean-VM release gates
+
+- Install and first launch.
+- Create, save, reopen, and restore a school archive.
+- Upgrade over a previous release and confirm school data remains.
+- Uninstall and confirm `%LOCALAPPDATA%\LEOS` is retained.
+- Configure Authenticode signing and verify the final signature.
+
+The current unpacked artifact has also been smoke-launched locally: the main
+process remained running with three child processes, `resources/app.asar` and
+`resources/renderer/index.html` were both present. This is useful packaging
+evidence, but it is not a substitute for the clean-VM gates above.

@@ -1,0 +1,1 @@
+const {rmSync}=require('node:fs');const {join,basename}=require('node:path');const target=join(__dirname,'.coordination-test');if(basename(target)!=='.coordination-test')throw new Error('Unexpected cleanup target');rmSync(target,{recursive:true,force:true,maxRetries:5,retryDelay:100});
